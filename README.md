@@ -1,12 +1,18 @@
 # Project Hellian
 
-A turn-based strategy game in the spirit of Fire Emblem. This repo currently
-contains a playable browser demo: **Grimwater Crossing**, a 16×12 skirmish map
-where two armies of seven fight across a river.
+A turn-based strategy game in the spirit of Fire Emblem. The playable
+scenario is **Grimwater Crossing**, a 16×12 skirmish map where two armies
+of seven fight across a river — available in two implementations:
+
+- **`index.html` + `js/`** — the original zero-dependency browser prototype.
+- **`godot/`** — the Godot 4.5 port. See
+  [docs/GODOT_PORT.md](docs/GODOT_PORT.md) for a step-by-step walkthrough
+  of how the prototype was integrated into the engine (written as a
+  learning guide for programmers new to game engines).
 
 ## Running the demo
 
-No build step, no dependencies — it's plain HTML/JS/Canvas:
+**Browser version** — no build step, no dependencies:
 
 ```
 # Option 1: just open it
@@ -15,6 +21,10 @@ open index.html          # or double-click it in a file browser
 # Option 2: serve it (avoids any file:// quirks)
 npx serve .              # then visit the printed URL
 ```
+
+**Godot version** — install [Godot 4.5](https://godotengine.org/download),
+then Import → `godot/project.godot` → F5. Headless battle-simulation test:
+`cd godot && godot --headless -s tests/sim_test.gd`.
 
 ## What's in the demo
 
@@ -40,23 +50,23 @@ npx serve .              # then visit the printed URL
 ## Architecture
 
 The game core is deliberately engine-agnostic — plain data and functions
-with no DOM or rendering dependencies — so it can be ported into a real
-engine later without rewriting the rules:
+with no DOM or rendering dependencies. The Godot port kept that boundary:
+each core file maps 1:1 to a script in `godot/scripts/core/`.
 
-| File | Role |
-|---|---|
-| `js/data.js` | Terrain table, class definitions, rosters, map layout |
-| `js/grid.js` | Cardinal-direction pathfinding, ranges, targeting |
-| `js/combat.js` | Battle forecast and resolution (hit/crit/double/counter) |
-| `js/ai.js` | Action planning for AI-controlled units |
-| `js/game.js` | Game state, turn flow, win conditions |
-| `js/render.js` | Canvas presentation layer |
-| `js/main.js` | Input handling, UI panels, simulation loop |
+| Browser prototype | Godot port | Role |
+|---|---|---|
+| `js/data.js` | `core/game_data.gd` (+ `terrain_type.gd`, `unit_class.gd`) | Terrain table, class definitions, rosters, map layout |
+| `js/grid.js` | `core/grid.gd` | Cardinal-direction pathfinding, ranges, targeting |
+| `js/combat.js` | `core/combat.gd` | Battle forecast and resolution (hit/crit/double/counter) |
+| `js/ai.js` | `core/ai.gd` | Action planning for AI-controlled units |
+| `js/game.js` | `core/game.gd` (+ `unit.gd`) | Game state, turn flow, win conditions |
+| `js/render.js` | `scripts/board.gd`, `scripts/unit_node.gd` | Presentation layer |
+| `js/main.js` | `scripts/main.gd`, `scripts/ui.gd` | Input handling, UI panels, simulation loop |
 
 ## Engine choice
 
-**For prototyping (this demo):** plain web tech. Instant iteration, runs
-anywhere, trivially shareable, and forces the game rules to live in clean
+**For prototyping:** plain web tech. Instant iteration, runs anywhere,
+trivially shareable, and forces the game rules to live in clean
 engine-independent code.
 
 **For the real game: Godot over Unity.** Unity absolutely *can* build this,
@@ -64,6 +74,7 @@ but a 2D grid tactics game uses almost none of what Unity is heavy for
 (3D pipeline, physics, its asset/licensing ecosystem). Godot is free and
 open source, dramatically lighter, and its 2D tooling (TileMapLayer, grid
 coordinates, animation) maps one-to-one onto this genre. GDScript is close
-enough to the JavaScript here that `grid.js`, `combat.js`, and `ai.js` port
-almost mechanically. Unity is the better pick only if C# is a hard
-requirement or console porting support matters early.
+enough to the JavaScript here that the core files ported almost
+mechanically — [docs/GODOT_PORT.md](docs/GODOT_PORT.md) documents exactly
+how. Unity is the better pick only if C# is a hard requirement or console
+porting support matters early.
