@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project Hellian — Tactics Demo</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <h1>Project Hellian</h1>
+    <span class="subtitle">turn-based tactics demo — Grimwater Crossing</span>
+  </header>
+
+  <div id="turnbanner" class="banner banner-player">Turn 1 — Player Phase</div>
+
+  <main>
+    <div id="board-wrap">
+      <canvas id="board"></canvas>
+      <div id="forecast" class="hidden"></div>
+    </div>
+
+    <aside>
+      <div class="controls">
+        <button id="simulate">▶ Simulate Battle</button>
+        <button id="endturn">End Turn</button>
+        <button id="reset">↺ Reset</button>
+        <label>Speed
+          <select id="speed">
+            <option value="600">Slow</option>
+            <option value="300" selected>Normal</option>
+            <option value="90">Fast</option>
+          </select>
+        </label>
+      </div>
+      <div id="counts" class="counts"></div>
+      <div id="unitinfo" class="panel"></div>
+      <div id="log" class="panel log"></div>
+      <div class="help panel">
+        <h3>How to play</h3>
+        <p>Click a <b>blue unit</b> → blue tiles show its movement range
+        (cardinal steps only). Click a tile to move. Enemies in range glow
+        <b>red</b> — click one to attack (hover for the battle forecast).
+        Click anywhere else to wait. Healers highlight wounded allies in
+        <b>green</b>.</p>
+        <p><b>Simulate Battle</b> lets the AI play both armies to the end.</p>
+      </div>
+    </aside>
+  </main>
+
+  <script src="js/data.js"></script>
+  <script src="js/grid.js"></script>
+  <script src="js/combat.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

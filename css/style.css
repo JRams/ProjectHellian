@@ -1,0 +1,104 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #1c1f26;
+  color: #e8e8ec;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 16px;
+}
+
+header { text-align: center; margin-bottom: 10px; }
+header h1 { font-size: 26px; letter-spacing: 2px; }
+.subtitle { color: #9aa0ae; font-size: 13px; }
+
+.banner {
+  padding: 6px 24px;
+  border-radius: 6px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  transition: background 0.3s;
+}
+.banner-player { background: #2c5f96; }
+.banner-enemy { background: #96342c; }
+
+main { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+
+#board-wrap { position: relative; }
+#board {
+  border: 3px solid #3a3f4c;
+  border-radius: 4px;
+  cursor: pointer;
+  display: block;
+  max-width: 100%;
+}
+
+#forecast {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(15, 17, 22, 0.92);
+  border: 1px solid #4a90d9;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  pointer-events: none;
+}
+#forecast h3 { font-size: 13px; color: #8dbef0; margin-bottom: 4px; }
+.fc-row { margin: 2px 0; }
+.fc-row.counter { color: #f0938d; }
+.hidden { display: none; }
+
+aside { width: 320px; display: flex; flex-direction: column; gap: 10px; }
+
+.controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+button {
+  background: #4a90d9;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:hover { background: #5a9fe8; }
+#reset { background: #545b6a; }
+#reset:hover { background: #646c7d; }
+label { font-size: 12px; color: #9aa0ae; }
+select { margin-left: 4px; background: #2a2e38; color: #e8e8ec; border: 1px solid #3a3f4c; border-radius: 4px; padding: 3px; }
+
+.counts { font-size: 13px; color: #9aa0ae; }
+
+.panel {
+  background: #262a33;
+  border: 1px solid #3a3f4c;
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 13px;
+}
+.panel h3 { font-size: 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot.player { background: #4a90d9; }
+.dot.enemy { background: #d9534f; }
+
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; margin: 6px 0; color: #c8ccd6; }
+.weapon { color: #ffe94d; font-size: 12px; margin-bottom: 4px; }
+.desc { color: #9aa0ae; font-size: 12px; line-height: 1.4; }
+
+.log { height: 220px; overflow-y: auto; line-height: 1.5; }
+.log div { padding: 1px 0; }
+.log-phase { color: #8dbef0; font-weight: 600; margin-top: 4px; }
+.log-player-hit { color: #8dbef0; }
+.log-enemy-hit { color: #f0938d; }
+.log-miss { color: #767d8c; }
+.log-death { color: #ffb14d; font-weight: 600; }
+.log-heal { color: #7de8a0; }
+.log-victory { color: #ffe94d; font-weight: 700; }
+
+.help p { color: #9aa0ae; font-size: 12px; line-height: 1.5; margin-top: 6px; }
+.help b { color: #c8ccd6; }
