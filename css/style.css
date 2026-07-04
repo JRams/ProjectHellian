@@ -48,6 +48,15 @@ main { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; justi
   pointer-events: none;
 }
 #forecast h3 { font-size: 13px; color: #8dbef0; margin-bottom: 4px; }
+
+#battlefx {
+  position: absolute;
+  left: 75px;   /* (704 - 560) / 2, plus the board border */
+  top: 117px;   /* (528 - 300) / 2 */
+  border-radius: 12px;
+  box-shadow: 0 10px 48px rgba(0, 0, 0, 0.65);
+  cursor: pointer;
+}
 .fc-row { margin: 2px 0; }
 .fc-row.counter { color: #f0938d; }
 .hidden { display: none; }

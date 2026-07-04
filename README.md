@@ -41,6 +41,10 @@ then Import → `godot/project.godot` → F5. Headless battle-simulation test:
   avoid bonuses, counterattacks when the defender's range allows, and
   follow-up attacks when one side is 4+ Spd faster. Hovering a target shows
   a battle forecast before you commit.
+- **Battle vignettes** — Fire Emblem style combat cut-ins overlaid on the
+  battlefield: fighters lunge, damage numbers pop, HP bars drain, crits
+  flash, misses dodge, deaths fade. Click a vignette to skip it, or turn
+  animations off entirely with the "Battle anims" toggle.
 - **Playable + auto-simulation** — control the blue army yourself against
   the enemy AI, or press **Simulate Battle** and watch the AI play both
   sides to a conclusion. The AI scores every reachable (tile, target) pair,
@@ -61,6 +65,7 @@ each core file maps 1:1 to a script in `godot/scripts/core/`.
 | `js/ai.js` | `core/ai.gd` | Action planning for AI-controlled units |
 | `js/game.js` | `core/game.gd` (+ `unit.gd`) | Game state, turn flow, win conditions |
 | `js/render.js` | `scripts/board.gd`, `scripts/unit_node.gd` | Presentation layer |
+| `js/battle.js` | `scripts/battle_vignette.gd` | Animated battle vignette overlay |
 | `js/main.js` | `scripts/main.gd`, `scripts/ui.gd` | Input handling, UI panels, simulation loop |
 
 ## Engine choice

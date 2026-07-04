@@ -17,6 +17,10 @@ const UNIT_SCENE := preload("res://scenes/unit.tscn")
 var game: Game
 var state := State.IDLE
 var auto := Auto.NONE
+# Bumped by Reset. Coroutines paused on `await` capture the value before
+# suspending and bail out if it changed — otherwise a Reset mid-vignette
+# would resume a continuation written for the previous game.
+var epoch := 0
 var selected: Unit = null
 var reachable := {}
 var move_from := Vector2i(-1, -1)
@@ -28,6 +32,7 @@ var unit_nodes := {}      # unit id -> UnitNode
 @onready var units_root: Node2D = $Units
 @onready var ui: CanvasLayer = $UI
 @onready var sim_timer: Timer = $SimTimer
+@onready var battle_fx: Control = $UI/BattleFX
 
 
 func _ready() -> void:
@@ -133,7 +138,10 @@ func _on_click(cell: Vector2i) -> void:
 		State.ACTION_SELECT:
 			if clicked != null and attack_targets.has(clicked):
 				game.attack(selected, clicked)
-				_finish_action()
+				_clear_selection()
+				_refresh_all()
+				if await _play_battle_if_any():
+					_maybe_auto_end_turn()
 			elif clicked != null and heal_targets.has(clicked):
 				game.heal(selected, clicked)
 				_finish_action()
@@ -210,7 +218,9 @@ func _step_enemy_phase() -> void:
 		var acted := game.step_ai(Unit.Team.ENEMY)
 		if acted != null:
 			unit_nodes[acted.id].refresh(true)
-			sim_timer.start(ui.sim_delay())
+			_refresh_all()
+			if await _play_battle_if_any() and auto == Auto.ENEMY_PHASE:
+				sim_timer.start(ui.sim_delay())
 		else:
 			game.end_turn()
 			auto = Auto.NONE
@@ -227,8 +237,28 @@ func _step_simulation() -> void:
 			unit_nodes[acted.id].refresh(true)
 		else:
 			game.end_turn()
-		sim_timer.start(ui.sim_delay())
+		_refresh_all()
+		if await _play_battle_if_any() and auto == Auto.SIMULATE:
+			sim_timer.start(ui.sim_delay())
 	_refresh_all()
+
+
+# If the last action was a battle and animations are on, play the vignette
+# and wait for it to close. The caller `await`s this, so nothing advances
+# the game underneath the animation — the GDScript equivalent of the
+# continuation-callback plumbing in js/main.js, but linear to read.
+# Returns false if a Reset invalidated this flow while it was suspended.
+func _play_battle_if_any() -> bool:
+	var battle := game.take_last_battle()
+	if battle.is_empty() or not ui.anims_enabled():
+		return true
+	var my_epoch := epoch
+	battle_fx.play(battle, ui.battle_time_scale())
+	await battle_fx.finished
+	if epoch != my_epoch:
+		return false
+	_refresh_all()
+	return true
 
 
 # --- Buttons ---------------------------------------------------------------------
@@ -260,7 +290,9 @@ func _on_end_turn() -> void:
 
 func _on_reset() -> void:
 	auto = Auto.NONE
+	epoch += 1                # invalidate suspended flows BEFORE abort resumes them
 	sim_timer.stop()
+	battle_fx.abort()
 	ui.set_simulating(false)
 	_clear_selection()
 	game.reset()

@@ -258,7 +258,57 @@ Fire-and-forget: the engine interpolates `position` every frame and
 disposes the tween when done. The JS version simply teleported units;
 this is the first thing the engine gives you "for free."
 
-## Step 9 — Verifying without a window
+## Step 9 — Battle vignettes: overlays, `_process` animation, and `await`
+
+The Fire Emblem combat cut-in (`js/battle.js` → `scripts/battle_vignette.gd`)
+is the most instructive piece of the port, because it forces three engine
+concepts at once.
+
+**The design is identical in both versions:** the core resolves combat
+instantly (`combat.gd` mutates HP and returns an event list), and
+`game.attack()` records a snapshot — combatants, pre-battle HP, events —
+that the presentation layer *replays* as an animation: fighters lunge on
+each strike, damage numbers pop, HP bars drain, crits flash the screen,
+misses dodge, deaths fade out. Simulation logic never waits on animation
+state; animation is pure playback. That separation is why the headless
+test from Step 10 still runs at full speed with no window.
+
+What differs is the plumbing:
+
+1. **The overlay is a full-screen `Control`.** While visible, its default
+   `mouse_filter = STOP` swallows every click before it reaches the board
+   *or* the sidebar buttons — the whole "block input during the animation"
+   problem disappears into node ordering (BattleFX is the last child of the
+   UI layer, so it's drawn — and hit-tested — on top). Its `_gui_input`
+   gets the clicks it swallowed, which implements click-to-skip in four
+   lines. The JS version needed an `ui.battlePlaying` flag checked in
+   every input handler.
+
+2. **The animation loop is `_process(delta)`.** The JS version drives a
+   `requestAnimationFrame` chain and computes `dt` from timestamps; in
+   Godot the engine calls `_process(delta)` on every node, every frame,
+   with `delta` handed to you. The beat timeline (intro → one beat per
+   strike → outro) transfers line for line.
+
+3. **Completion is a signal you can `await`.** The vignette emits
+   `finished`; the three places that trigger battles (player attack,
+   enemy phase step, simulation step) do
+   `if await _play_battle_if_any(): ...continue...`.
+   Compare with `js/main.js`, where the same control flow has to thread a
+   `done` callback through `playBattleThen(...)` — GDScript's `await`
+   flattens continuation-passing into straight-line code. One real-world
+   wrinkle came with it: **Reset can fire while a coroutine is suspended.**
+   If Reset aborts the vignette, the suspended continuation must not
+   resume against the freshly reset game — `main.gd` guards this with an
+   `epoch` counter captured before each `await` and checked after. That
+   invalidation pattern (generation counters around suspension points)
+   shows up in every engine with async gameplay code.
+
+Timing knob: on the Fast sim speed the vignette plays at 3× (`time_scale`
+multiplies `delta`), and the "Battle anims" toggle skips vignettes
+entirely — both mirrored in the web version.
+
+## Step 10 — Verifying without a window
 
 The JS prototype was verified by driving headless Chromium with
 Playwright. The Godot equivalent is built into the binary — no browser
@@ -275,6 +325,9 @@ battles with **seeded RNG** (reproducible — an upgrade over the JS
 version's `Math.random`), asserts every reachable tile is within movement
 budget and every path is strictly cardinal, and exits nonzero on failure.
 That exit code makes it CI-ready as-is.
+
+(The battle vignette is deliberately not exercised here — it's pure
+playback of the same event lists the test already validates.)
 
 Static checking exists too, via `pip install gdtoolkit` (the community
 GDScript toolchain, versioned in lockstep with Godot):
@@ -310,7 +363,9 @@ and please fix-and-commit (the docs and structure won't change).
    Inspector. Teaches: Godot's data-asset pipeline (designers edit data
    without touching code).
 3. **AnimationPlayer / AnimatedSprite2D** — sprite units with idle/attack
-   animations. Teaches: keyframe animation.
+   animations. Teaches: keyframe animation. (The battle vignette is the
+   natural place to start: rebuild its hand-rolled beat timeline as
+   AnimationPlayer tracks and compare.)
 4. **Camera2D** — bigger maps with scrolling and edge-pan. The
    `get_local_mouse_position()` input code already survives this change.
 5. **AudioStreamPlayer** — hit/heal/victory sounds. Teaches: the audio bus.

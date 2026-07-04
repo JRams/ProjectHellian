@@ -26,6 +26,7 @@ const LOG_COLORS := {
 @onready var end_turn_btn: Button = $Sidebar/Controls/EndTurnBtn
 @onready var reset_btn: Button = $Sidebar/Controls/ResetBtn
 @onready var speed: OptionButton = $Sidebar/SpeedRow/Speed
+@onready var anims_check: CheckButton = $Sidebar/SpeedRow/AnimsCheck
 @onready var counts: Label = $Sidebar/Counts
 @onready var info: RichTextLabel = $Sidebar/InfoPanel/Info
 @onready var log_label: RichTextLabel = $Sidebar/LogPanel/Log
@@ -46,6 +47,15 @@ func _ready() -> void:
 
 func sim_delay() -> float:
 	return SPEEDS[speed.selected][1]
+
+
+func anims_enabled() -> bool:
+	return anims_check.button_pressed
+
+
+# Fast speed plays vignettes 3x quicker so animations don't dominate a sim.
+func battle_time_scale() -> float:
+	return 3.0 if sim_delay() <= 0.1 else 1.0
 
 
 func set_simulating(on: bool) -> void:

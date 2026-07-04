@@ -5,6 +5,7 @@
 const game = new Game();
 const canvas = document.getElementById("board");
 const renderer = new Renderer(canvas);
+const battleFX = new BattleVignette(document.getElementById("battlefx"));
 
 // UI interaction state machine:
 //   idle          — nothing selected
@@ -73,6 +74,25 @@ function maybeAutoEndTurn() {
   }
 }
 
+// If the last action was a battle and animations are on, play the vignette
+// and run `done` when it closes; otherwise run `done` immediately. Every
+// "what happens next" (enemy phase, next sim step) is deferred through here
+// so the game never advances underneath the animation.
+function playBattleThen(done) {
+  const battle = game.takeLastBattle();
+  if (!battle || !document.getElementById("anims").checked) {
+    done();
+    return;
+  }
+  ui.battlePlaying = true;
+  const timeScale = simDelay() <= 100 ? 3 : 1; // Fast speed: quicker vignettes
+  battleFX.play(battle, () => {
+    ui.battlePlaying = false;
+    redraw();
+    done();
+  }, timeScale);
+}
+
 // --- Click handling ---------------------------------------------------------
 
 canvas.addEventListener("mousemove", e => {
@@ -91,7 +111,7 @@ canvas.addEventListener("mousemove", e => {
 canvas.addEventListener("mouseleave", () => { ui.hover = null; redraw(); });
 
 canvas.addEventListener("click", e => {
-  if (ui.simulating || game.winner) return;
+  if (ui.simulating || ui.battlePlaying || game.winner) return;
   if (game.turn !== "player") return;
 
   const r = canvas.getBoundingClientRect();
@@ -125,7 +145,8 @@ canvas.addEventListener("click", e => {
     if (clicked && ui.attackTargets && ui.attackTargets.includes(clicked)) {
       game.attack(unit, clicked);
       clearSelection();
-      maybeAutoEndTurn();
+      redraw();
+      playBattleThen(() => { maybeAutoEndTurn(); redraw(); });
     } else if (clicked && ui.healTargets && ui.healTargets.includes(clicked)) {
       game.heal(unit, clicked);
       clearSelection();
@@ -147,7 +168,7 @@ function runEnemyPhase() {
     const acted = game.stepAI("enemy");
     redraw();
     if (acted) {
-      setTimeout(step, simDelay());
+      playBattleThen(() => setTimeout(step, simDelay()));
     } else {
       game.endTurn();
       redraw();
@@ -168,7 +189,9 @@ function simulateStep() {
   const acted = game.stepAI(game.turn);
   if (!acted) game.endTurn();
   redraw();
-  ui.simTimer = setTimeout(simulateStep, simDelay());
+  playBattleThen(() => {
+    if (ui.simulating) ui.simTimer = setTimeout(simulateStep, simDelay());
+  });
 }
 
 function simDelay() {
@@ -176,7 +199,7 @@ function simDelay() {
 }
 
 document.getElementById("simulate").addEventListener("click", () => {
-  if (game.winner) return;
+  if (game.winner || ui.battlePlaying) return;
   ui.simulating = !ui.simulating;
   clearSelection();
   document.getElementById("simulate").textContent =
@@ -186,7 +209,7 @@ document.getElementById("simulate").addEventListener("click", () => {
 });
 
 document.getElementById("endturn").addEventListener("click", () => {
-  if (ui.simulating || game.winner || game.turn !== "player") return;
+  if (ui.simulating || ui.battlePlaying || game.winner || game.turn !== "player") return;
   clearSelection();
   game.endTurn();
   runEnemyPhase();
@@ -195,6 +218,8 @@ document.getElementById("endturn").addEventListener("click", () => {
 document.getElementById("reset").addEventListener("click", () => {
   ui.simulating = false;
   clearTimeout(ui.simTimer);
+  battleFX.abort();          // drops the pending continuation on purpose:
+  ui.battlePlaying = false;  // reset() rebuilds all state below
   document.getElementById("simulate").textContent = "▶ Simulate Battle";
   clearSelection();
   game.reset();

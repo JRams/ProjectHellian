@@ -15,6 +15,7 @@ var turn: Unit.Team = Unit.Team.PLAYER
 var turn_count := 1
 var winner := NO_WINNER          # NO_WINNER, or a Unit.Team value
 var log: Array = []              # Array of {text, kind, turn}
+var last_battle := {}            # pending battle record for the vignette
 var rng := RandomNumberGenerator.new()
 
 var _next_unit_id := 1
@@ -35,6 +36,7 @@ func reset() -> void:
 	turn_count = 1
 	winner = NO_WINNER
 	log = []
+	last_battle = {}
 	add_log("— Turn 1: Player phase —", "phase")
 
 
@@ -73,7 +75,16 @@ func move_unit(unit: Unit, p: Vector2i) -> void:
 
 
 func attack(attacker: Unit, defender: Unit) -> Array:
+	# Snapshot for the battle vignette: the overlay replays these events
+	# starting from pre-battle HP. Core stays presentation-agnostic — it
+	# just records what happened; the UI decides whether to animate it.
+	last_battle = {
+		"attacker": attacker, "defender": defender,
+		"attacker_hp_before": attacker.hp, "defender_hp_before": defender.hp,
+		"events": [],
+	}
 	var events := Combat.resolve_battle(attacker, defender, rng)
+	last_battle["events"] = events
 	for ev: Dictionary in events:
 		var from_u: Unit = ev["from"]
 		var to_u: Unit = ev["to"]
@@ -102,6 +113,13 @@ func heal(healer: Unit, target: Unit) -> Dictionary:
 
 func hold(unit: Unit) -> void:
 	unit.acted = true
+
+
+# Hand the pending battle record to the UI exactly once.
+func take_last_battle() -> Dictionary:
+	var b := last_battle
+	last_battle = {}
+	return b
 
 
 # --- Turn flow ---------------------------------------------------------------

@@ -34,6 +34,7 @@ class Game {
     this.turnCount = 1;
     this.winner = null;
     this.log = [];
+    this.lastBattle = null;
     this.rng = Math.random;
     this.addLog(`— Turn 1: Player phase —`, "phase");
   }
@@ -59,7 +60,16 @@ class Game {
   }
 
   attack(attacker, defender) {
+    // Snapshot for the battle vignette: the overlay replays these events
+    // starting from pre-battle HP. Core stays presentation-agnostic — it
+    // just records what happened; the UI decides whether to animate it.
+    this.lastBattle = {
+      attacker, defender,
+      preHp: { attacker: attacker.hp, defender: defender.hp },
+      events: null,
+    };
     const events = resolveBattle(attacker, defender, this.rng);
+    this.lastBattle.events = events;
     for (const ev of events) {
       if (ev.type === "miss") {
         this.addLog(`${ev.from.name} (${ev.from.cls.name}) misses ${ev.to.name}.`, "miss");
@@ -85,6 +95,13 @@ class Game {
 
   wait(unit) {
     unit.acted = true;
+  }
+
+  // Hand the pending battle record to the UI exactly once.
+  takeLastBattle() {
+    const b = this.lastBattle;
+    this.lastBattle = null;
+    return b;
   }
 
   // --- Turn flow ----------------------------------------------------------
