@@ -83,7 +83,9 @@ scroll_following = true
 bbcode_enabled = true
 fit_content = true
 text = "[b]How to play[/b]
-[color=#9aa0ae]Click a [b]blue unit[/b] — blue tiles show its movement range (cardinal steps only). Click a tile to move. Enemies in range glow [b]red[/b]; click one to attack (hover for the forecast). Click anywhere else to wait. [b]Simulate[/b] lets the AI play both armies.[/color]"
+[color=#9aa0ae]Click a [b]blue unit[/b] — blue tiles show its movement range (cardinal steps only). Click a tile to move. Enemies in range glow [b]red[/b]; click one to attack (hover for the forecast). Click anywhere else to wait.
+[b]Battle timing:[/b] press [b]Space[/b] (or click) when the shrinking ring meets the target. Each class has its own rhythm — chain every press perfectly for [b]MAX! damage (1.5×)[/b]. [color=#4a90d9]Blue[/color] = physical, [color=#3ecf6e]green[/color] = magic, [color=#e04848]red[/color] = brace to halve an incoming hit.
+[b]Simulate[/b] lets the AI play both armies (no QTEs).[/color]"
 
 [node name="Forecast" type="PanelContainer" parent="UI"]
 visible = false

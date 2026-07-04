@@ -43,34 +43,49 @@ static func battle_forecast(attacker: Unit, defender: Unit) -> Dictionary:
 	return {"atk": atk, "def": def}
 
 
-# Resolve a full battle. Returns an array of event Dictionaries for the
-# log / renderer. Order: attacker strike, counter, follow-up by the faster.
+# The full strike order of a battle: attacker, counter (if the defender's
+# range allows), then a follow-up by whichever side doubles. Strikes whose
+# actor or target has died by the time they come up are skipped at
+# resolution time.
+static func plan_strikes(attacker: Unit, defender: Unit) -> Array:
+	var strikes: Array = [{"actor": attacker, "target": defender}]
+	var counter := can_counter(defender, attacker)
+	if counter:
+		strikes.append({"actor": defender, "target": attacker})
+	if doubles(attacker, defender):
+		strikes.append({"actor": attacker, "target": defender})
+	elif counter and doubles(defender, attacker):
+		strikes.append({"actor": defender, "target": attacker})
+	return strikes
+
+
+# Resolve ONE strike, mutating the target's HP.
+# off_mult scales damage dealt (the attacker's QTE result); def_mult scales
+# damage taken (the defender's QTE result). Both default to neutral so
+# AI-vs-AI battles behave exactly as before QTEs existed.
+# `qte` is an optional grade label carried into the event for the log.
+static func resolve_strike(actor: Unit, target: Unit, rng: RandomNumberGenerator,
+		off_mult := 1.0, def_mult := 1.0, qte := "") -> Dictionary:
+	var s := strike_stats(actor, target)
+	if rng.randi_range(0, 99) >= int(s["hit"]):
+		return {"type": "miss", "from": actor, "to": target, "qte": qte}
+	var is_crit: bool = rng.randi_range(0, 99) < int(s["crit"])
+	var base: int = s["dmg"] * 3 if is_crit else s["dmg"]
+	var dmg := maxi(0, roundi(base * off_mult * def_mult))
+	target.hp = maxi(0, target.hp - dmg)
+	return {"type": "hit", "from": actor, "to": target,
+		"dmg": dmg, "crit": is_crit, "killed": target.hp == 0, "qte": qte}
+
+
+# Resolve a full battle instantly at neutral multipliers (AI vs AI, or
+# animations disabled). Returns the event list for the log / replay.
 static func resolve_battle(attacker: Unit, defender: Unit,
 		rng: RandomNumberGenerator) -> Array:
 	var events: Array = []
-
-	var strike := func(a: Unit, d: Unit) -> void:
-		if a.hp <= 0 or d.hp <= 0:
-			return
-		var s := strike_stats(a, d)
-		if rng.randi_range(0, 99) >= int(s["hit"]):
-			events.append({"type": "miss", "from": a, "to": d})
-			return
-		var is_crit: bool = rng.randi_range(0, 99) < int(s["crit"])
-		var dmg: int = s["dmg"] * 3 if is_crit else s["dmg"]
-		d.hp = maxi(0, d.hp - dmg)
-		events.append({
-			"type": "hit", "from": a, "to": d,
-			"dmg": dmg, "crit": is_crit, "killed": d.hp == 0,
-		})
-
-	strike.call(attacker, defender)
-	if defender.hp > 0 and can_counter(defender, attacker):
-		strike.call(defender, attacker)
-	if doubles(attacker, defender):
-		strike.call(attacker, defender)
-	elif defender.hp > 0 and can_counter(defender, attacker) and doubles(defender, attacker):
-		strike.call(defender, attacker)
+	for s: Dictionary in plan_strikes(attacker, defender):
+		if s["actor"].hp <= 0 or s["target"].hp <= 0:
+			continue
+		events.append(resolve_strike(s["actor"], s["target"], rng))
 	return events
 
 

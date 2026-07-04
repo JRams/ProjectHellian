@@ -264,14 +264,20 @@ The Fire Emblem combat cut-in (`js/battle.js` → `scripts/battle_vignette.gd`)
 is the most instructive piece of the port, because it forces three engine
 concepts at once.
 
-**The design is identical in both versions:** the core resolves combat
-instantly (`combat.gd` mutates HP and returns an event list), and
-`game.attack()` records a snapshot — combatants, pre-battle HP, events —
-that the presentation layer *replays* as an animation: fighters lunge on
-each strike, damage numbers pop, HP bars drain, crits flash the screen,
-misses dodge, deaths fade out. Simulation logic never waits on animation
-state; animation is pure playback. That separation is why the headless
-test from Step 10 still runs at full speed with no window.
+**The design is identical in both versions**, and the vignette runs in two
+modes:
+
+- **Replay** (AI vs AI): the core resolves combat instantly
+  (`combat.gd` mutates HP and returns an event list), and `game.attack()`
+  records a snapshot — combatants, pre-battle HP, events — that the
+  vignette replays as pure animation: fighters lunge on each strike,
+  damage numbers pop, HP bars drain, crits flash, misses dodge, deaths
+  fade out. Nothing waits on animation state, which is why the headless
+  test from Step 10 still runs at full speed with no window.
+- **Interactive** (the player's battles — see "Quick Time Events" below):
+  the core only *plans* the strike order (`Combat.plan_strikes`), and each
+  strike resolves mid-vignette (`Combat.resolve_strike`) after the
+  player's timed input sets its damage multiplier.
 
 What differs is the plumbing:
 
@@ -304,9 +310,45 @@ What differs is the plumbing:
    invalidation pattern (generation counters around suspension points)
    shows up in every engine with async gameplay code.
 
-Timing knob: on the Fast sim speed the vignette plays at 3× (`time_scale`
+Timing knob: on the Fast sim speed replay vignettes play at 3× (`time_scale`
 multiplies `delta`), and the "Battle anims" toggle skips vignettes
 entirely — both mirrored in the web version.
+
+### Quick Time Events (Legend of Dragoon style additions)
+
+Battles involving the player are interactive: before each blow, a ring
+shrinks onto a target and the player presses Space (or clicks) at the
+moment they align — one press per step of the attacking class's unique
+rhythm (`qte` in `game_data.gd`: the Knight is one slow heavy beat, the
+Mercenary a three-press chain, the Pegasus three rapid taps…). Press
+quality (Perfect / Good / Miss) averages into a damage multiplier of
+0.75×–1.5×; chaining every press perfectly earns **MAX!**. When an *enemy*
+strike is incoming, the player instead gets a one-press **brace** that
+cuts the damage to 50/75/100%. Ring colors encode the combat type:
+**blue** physical, **green** magic, **red** defense.
+
+Engine notes on the implementation (`battle_vignette.gd`):
+
+- **The QTE is a sub-state machine inside the vignette.** Interactive mode
+  swaps the replay-mode beat list for phases
+  (`INTRO → APPROACH → QTE → IMPACT → … → OUTRO`), all advanced by the
+  same `_process(delta)`. Timing windows are measured in accumulated
+  `delta` time, not frames — the same discipline as the JS version's
+  `requestAnimationFrame` deltas, and the reason timing feels identical
+  at any frame rate.
+- **Keyboard input arrives via `_unhandled_key_input`** — the keyboard
+  sibling of `_unhandled_input` from Step 5 — while mouse presses reuse
+  the overlay's `_gui_input`. Both funnel into one `_press()` that grades
+  the timing error.
+- **The core/presentation boundary held.** `combat.gd` gained
+  `plan_strikes()` and `resolve_strike(actor, target, rng, off_mult,
+  def_mult)`; it knows nothing about rings or input. The grading math
+  (`grade_press`, `offense_result`, `defense_result`) is `static` on the
+  vignette, so the headless test exercises it without a window. AI-vs-AI
+  paths pass neutral multipliers and behave exactly as before.
+- **`time_scale` is forced to 1 in interactive mode** — speeding up the
+  animation would change the difficulty, because the timing *is* the
+  gameplay.
 
 ## Step 10 — Verifying without a window
 

@@ -30,6 +30,12 @@ const TERRAIN_CHARS := {
 	"~": "water", "=": "bridge", "F": "fort",
 }
 
+# Quick Time Events (Legend of Dragoon style "additions").
+# Each class has a unique attack pattern: `periods` is the seconds between
+# successive press targets (one entry per press); `perfect`/`good` are the
+# timing tolerances in seconds. Defense is one universal well-timed brace.
+const DEFENSE_QTE := {"periods": [0.7], "perfect": 0.06, "good": 0.14}
+
 # Starting rosters: [class name, x, y, personal name]
 const PLAYER_ARMY := [
 	["Knight", 1, 4, "Doran"],
@@ -69,6 +75,7 @@ static var unit_classes := {
 		"defense": 13, "resistance": 3, "movement": 4,
 		"attack_range": [1], "might": 8, "hit": 80, "crit": 0,
 		"description": "Armored wall. Hits hard, moves slow, shrugs off physical damage.",
+		"qte": {"periods": [1.1], "perfect": 0.07, "good": 0.16},
 	}),
 	"Mercenary": UnitClass.new({
 		"display_name": "Mercenary", "icon": "M", "weapon": "Steel Sword",
@@ -76,6 +83,7 @@ static var unit_classes := {
 		"defense": 6, "resistance": 4, "movement": 5,
 		"attack_range": [1], "might": 7, "hit": 95, "crit": 10,
 		"description": "Balanced swordfighter. Accurate, fast, doubles slower foes.",
+		"qte": {"periods": [0.55, 0.55, 0.55], "perfect": 0.055, "good": 0.12},
 	}),
 	"Cavalier": UnitClass.new({
 		"display_name": "Cavalier", "icon": "C", "weapon": "Iron Lance",
@@ -83,6 +91,7 @@ static var unit_classes := {
 		"defense": 9, "resistance": 4, "movement": 7,
 		"attack_range": [1], "might": 8, "hit": 85, "crit": 0, "is_mounted": true,
 		"description": "Mounted lancer. High movement, but mountains block the horse.",
+		"qte": {"periods": [0.7, 0.45], "perfect": 0.06, "good": 0.13},
 	}),
 	"Archer": UnitClass.new({
 		"display_name": "Archer", "icon": "A", "weapon": "Iron Bow",
@@ -90,6 +99,7 @@ static var unit_classes := {
 		"defense": 5, "resistance": 3, "movement": 5,
 		"attack_range": [2], "might": 7, "hit": 90, "crit": 5,
 		"description": "Attacks at range 2 only. Safe from melee counters, weak up close.",
+		"qte": {"periods": [0.8], "perfect": 0.04, "good": 0.09},
 	}),
 	"Mage": UnitClass.new({
 		"display_name": "Mage", "icon": "W", "weapon": "Fire Tome",
@@ -97,6 +107,7 @@ static var unit_classes := {
 		"defense": 3, "resistance": 10, "movement": 5,
 		"attack_range": [1, 2], "might": 6, "hit": 90, "crit": 0, "is_magic": true,
 		"description": "Magic damage targets resistance. Melts armored units.",
+		"qte": {"periods": [0.9, 0.5], "perfect": 0.06, "good": 0.13},
 	}),
 	"Healer": UnitClass.new({
 		"display_name": "Healer", "icon": "H", "weapon": "Heal Staff",
@@ -111,7 +122,13 @@ static var unit_classes := {
 		"defense": 5, "resistance": 9, "movement": 7,
 		"attack_range": [1], "might": 6, "hit": 90, "crit": 5, "is_flier": true,
 		"description": "Flier: ignores all terrain. Fast and evasive, but fragile.",
+		"qte": {"periods": [0.45, 0.4, 0.35], "perfect": 0.05, "good": 0.11},
 	}),
+}
+
+# QTE ring colors follow combat type: blue physical, green magic, red defense.
+static var qte_colors := {
+	"physical": Color("4a90d9"), "magic": Color("3ecf6e"), "defense": Color("e04848"),
 }
 
 # Keyed by Unit.Team enum values.

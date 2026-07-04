@@ -137,10 +137,19 @@ func _on_click(cell: Vector2i) -> void:
 				_clear_selection()
 		State.ACTION_SELECT:
 			if clicked != null and attack_targets.has(clicked):
-				game.attack(selected, clicked)
-				_clear_selection()
-				_refresh_all()
-				if await _play_battle_if_any():
+				if ui.anims_enabled():
+					# Interactive battle: strikes resolve inside the vignette,
+					# one QTE per blow (offense for ours, brace for counters).
+					var pending := game.begin_battle(selected, clicked)
+					_clear_selection()
+					_refresh_all()
+					if await _play_interactive(pending):
+						_maybe_auto_end_turn()
+				else:
+					game.attack(selected, clicked)
+					game.take_last_battle()  # no vignette to replay it
+					_clear_selection()
+					_refresh_all()
 					_maybe_auto_end_turn()
 			elif clicked != null and heal_targets.has(clicked):
 				game.heal(selected, clicked)
@@ -215,11 +224,19 @@ func _step_enemy_phase() -> void:
 	if game.winner != Game.NO_WINNER:
 		auto = Auto.NONE
 	else:
-		var acted := game.step_ai(Unit.Team.ENEMY)
+		# With animations on, enemy attacks become interactive battles so the
+		# player can brace (red QTE) against incoming strikes and time counters.
+		var acted := game.step_ai(Unit.Team.ENEMY, ui.anims_enabled())
 		if acted != null:
 			unit_nodes[acted.id].refresh(true)
 			_refresh_all()
-			if await _play_battle_if_any() and auto == Auto.ENEMY_PHASE:
+			var pending := game.take_pending_battle()
+			var flow_ok: bool
+			if not pending.is_empty():
+				flow_ok = await _play_interactive(pending)
+			else:
+				flow_ok = await _play_battle_if_any()
+			if flow_ok and auto == Auto.ENEMY_PHASE:
 				sim_timer.start(ui.sim_delay())
 		else:
 			game.end_turn()
@@ -254,6 +271,18 @@ func _play_battle_if_any() -> bool:
 		return true
 	var my_epoch := epoch
 	battle_fx.play(battle, ui.battle_time_scale())
+	await battle_fx.finished
+	if epoch != my_epoch:
+		return false
+	_refresh_all()
+	return true
+
+
+# Run an interactive (QTE) battle; strikes resolve as the player times
+# presses. Same epoch guard as the replay path.
+func _play_interactive(pending: Dictionary) -> bool:
+	var my_epoch := epoch
+	battle_fx.play_interactive(pending, game)
 	await battle_fx.finished
 	if epoch != my_epoch:
 		return false

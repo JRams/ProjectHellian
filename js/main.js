@@ -74,13 +74,17 @@ function maybeAutoEndTurn() {
   }
 }
 
+function animsOn() {
+  return document.getElementById("anims").checked;
+}
+
 // If the last action was a battle and animations are on, play the vignette
 // and run `done` when it closes; otherwise run `done` immediately. Every
 // "what happens next" (enemy phase, next sim step) is deferred through here
 // so the game never advances underneath the animation.
 function playBattleThen(done) {
   const battle = game.takeLastBattle();
-  if (!battle || !document.getElementById("anims").checked) {
+  if (!battle || !animsOn()) {
     done();
     return;
   }
@@ -91,6 +95,17 @@ function playBattleThen(done) {
     redraw();
     done();
   }, timeScale);
+}
+
+// Run an interactive (QTE) battle in the vignette; strikes resolve as the
+// player times their presses.
+function playInteractive(battle, done) {
+  ui.battlePlaying = true;
+  battleFX.playInteractive(battle, game, () => {
+    ui.battlePlaying = false;
+    redraw();
+    done();
+  });
 }
 
 // --- Click handling ---------------------------------------------------------
@@ -143,10 +158,19 @@ canvas.addEventListener("click", e => {
   } else if (ui.state === "actionSelect") {
     const unit = ui.selected;
     if (clicked && ui.attackTargets && ui.attackTargets.includes(clicked)) {
-      game.attack(unit, clicked);
-      clearSelection();
-      redraw();
-      playBattleThen(() => { maybeAutoEndTurn(); redraw(); });
+      if (animsOn()) {
+        // Interactive battle: strikes resolve inside the vignette, with a
+        // QTE per blow (offense for our strikes, brace for counters).
+        const battle = game.beginBattle(unit, clicked);
+        clearSelection();
+        redraw();
+        playInteractive(battle, () => { maybeAutoEndTurn(); redraw(); });
+      } else {
+        game.attack(unit, clicked);
+        game.takeLastBattle(); // no vignette to replay it
+        clearSelection();
+        maybeAutoEndTurn();
+      }
     } else if (clicked && ui.healTargets && ui.healTargets.includes(clicked)) {
       game.heal(unit, clicked);
       clearSelection();
@@ -165,10 +189,14 @@ function runEnemyPhase() {
   redraw();
   const step = () => {
     if (game.winner) { redraw(); return; }
-    const acted = game.stepAI("enemy");
+    // With animations on, enemy attacks become interactive battles so the
+    // player can brace (red QTE) against incoming strikes and time counters.
+    const acted = game.stepAI("enemy", animsOn());
     redraw();
     if (acted) {
-      playBattleThen(() => setTimeout(step, simDelay()));
+      const pending = game.takePendingBattle();
+      if (pending) playInteractive(pending, () => setTimeout(step, simDelay()));
+      else playBattleThen(() => setTimeout(step, simDelay()));
     } else {
       game.endTurn();
       redraw();

@@ -1,66 +1,121 @@
 # Port of js/battle.js — the Fire Emblem style combat cut-in.
 #
+# Two modes:
+#  - REPLAY: combat already resolved by the core; the overlay replays the
+#    recorded events (used for AI-vs-AI simulation).
+#  - INTERACTIVE: Legend of Dragoon style additions. The battle resolves
+#    strike by strike DURING the vignette: before each blow lands, the
+#    player times presses (Space / click) against a shrinking ring.
+#    Offense QTEs scale damage dealt 0.75x-1.5x; the defensive brace cuts
+#    incoming damage to 50/75/100%. Ring color = combat type:
+#    blue physical, green magic, red defense.
+#
 # Godot concepts on display:
 #  - A full-screen Control with mouse_filter STOP shields everything under
-#    it while visible: board clicks AND sidebar buttons are swallowed, and
-#    _gui_input gives us the click-to-skip for free. When hidden, it's inert.
-#  - The JS requestAnimationFrame loop becomes _process(delta): the engine
-#    calls it every frame with the elapsed time — same dt-driven timeline,
-#    no callback rescheduling.
-#  - Completion is a SIGNAL (`finished`); main.gd `await`s it, so game flow
-#    reads top-to-bottom instead of nesting continuations like the JS port.
+#    it while visible; _gui_input gives us press/skip clicks for free.
+#  - The JS requestAnimationFrame loop becomes _process(delta).
+#  - Keyboard timing input arrives via _unhandled_key_input.
+#  - Completion is a SIGNAL (`finished`); main.gd `await`s it.
+class_name BattleVignette
 extends Control
 
 signal finished
 
+enum Phase { INTRO, APPROACH, QTE, IMPACT, OUTRO }
+
 const W := 560.0
 const H := 300.0
-const INTRO := 0.35       # seconds: panel fade-in, fighters slide in
-const STRIKE := 0.95      # seconds per attack event
-const IMPACT_AT := 0.35   # fraction of a strike beat where the blow lands
+const INTRO_DUR := 0.35   # seconds: panel fade-in, fighters slide in
+const STRIKE := 0.95      # seconds per attack event (replay mode)
+const IMPACT_AT := 0.35   # fraction of a replay strike beat where the blow lands
+const APPROACH_DUR := 0.33  # interactive: lunge-in before the QTE
+const IMPACT_DUR := 0.8   # interactive: blow lands, then retreat
 const OUTRO := 0.6
 const OUTRO_KILL := 1.1
 const HP_DRAIN_RATE := 30.0
+const QTE_LEAD_IN := 0.45  # pause before the first ring starts shrinking
+const QTE_GAP := 0.3       # pause between presses of a multi-step addition
+const RING_POS := Vector2(280, 105)
+const RING_START := 74.0
+const RING_END := 26.0
 
 var playing := false
+var interactive := false
 var time_scale := 1.0
 var left := {}
 var right := {}
-var beats: Array = []
-var beat_index := 0
-var beat_elapsed := 0.0
 var popups: Array = []
 var flash := 0.0
 var panel_alpha := 0.0
 
+# replay mode
+var beats: Array = []
+var beat_index := 0
+var beat_elapsed := 0.0
 
-# battle = { attacker, defender, attacker_hp_before, defender_hp_before, events }
-func play(battle: Dictionary, p_time_scale := 1.0) -> void:
-	time_scale = p_time_scale
-	left = _make_fighter(battle["attacker"], -1, battle["attacker_hp_before"])
-	right = _make_fighter(battle["defender"], 1, battle["defender_hp_before"])
+# interactive mode
+var game_ref: Game = null
+var battle := {}
+var strikes: Array = []
+var strike_idx := -1
+var qte := {}
+var phase := Phase.INTRO
+var phase_t := 0.0
+var outro_dur := OUTRO
+var outro_beat := {}
+var finish_called := false
+
+
+# --- QTE grading (static so the headless test can exercise it) ----------------
+
+
+static func grade_press(err: float, spec: Dictionary) -> Dictionary:
+	if err <= spec["perfect"]:
+		return {"points": 1.0, "text": "PERFECT!", "color": Color("ffe94d")}
+	if err <= spec["good"]:
+		return {"points": 0.6, "text": "Good", "color": Color.WHITE}
+	return {"points": 0.0, "text": "Miss", "color": Color("8a90a0")}
+
+
+# Offense: average press quality maps to a damage multiplier.
+static func offense_result(points: Array) -> Dictionary:
+	var avg := 0.0
+	for p: float in points:
+		avg += p
+	avg /= points.size()
+	var label := "Whiffed"
+	if avg >= 0.999:
+		label = "MAX!"
+	elif avg >= 0.6:
+		label = "Great"
+	elif avg > 0.0:
+		label = "Good"
+	return {"mult": 0.75 + 0.75 * avg, "label": label}
+
+
+# Defense: one well-timed brace halves the incoming hit.
+static func defense_result(points: float) -> Dictionary:
+	if points >= 1.0:
+		return {"mult": 0.5, "label": "Blocked!"}
+	if points > 0.0:
+		return {"mult": 0.75, "label": "Braced"}
+	return {"mult": 1.0, "label": ""}
+
+
+# --- setup ---------------------------------------------------------------------
+
+
+func _setup_scene(p_battle: Dictionary) -> void:
+	left = _make_fighter(p_battle["attacker"], -1, p_battle["attacker_hp_before"])
+	right = _make_fighter(p_battle["defender"], 1, p_battle["defender_hp_before"])
 	popups = []
 	flash = 0.0
 	panel_alpha = 0.0
-
-	var killed := false
-	for ev: Dictionary in battle["events"]:
-		if ev["type"] == "hit" and ev["killed"]:
-			killed = true
-	beats = [{"type": "intro", "dur": INTRO}]
-	for ev: Dictionary in battle["events"]:
-		beats.append({"type": "strike", "dur": STRIKE, "ev": ev, "applied": false})
-	beats.append({"type": "outro", "dur": OUTRO_KILL if killed else OUTRO,
-			"death_shown": false})
-
-	beat_index = 0
-	beat_elapsed = 0.0
-	playing = true
 	visible = true
+	playing = true
 
 
-# `side` is -1 for the left fighter, +1 for the right — used to mirror
-# lunge/dodge directions without branching on strings.
+# `side` is -1 for the left fighter, +1 for the right.
 func _make_fighter(unit: Unit, side: int, hp_before: int) -> Dictionary:
 	return {
 		"unit": unit, "side": side,
@@ -75,62 +130,126 @@ func _make_fighter(unit: Unit, side: int, hp_before: int) -> Dictionary:
 	}
 
 
+func _fighter_of(unit: Unit) -> Dictionary:
+	return left if left["unit"] == unit else right
+
+
+# --- REPLAY mode (battle has "events") ------------------------------------------
+
+
+func play(p_battle: Dictionary, p_time_scale := 1.0) -> void:
+	interactive = false
+	game_ref = null
+	time_scale = p_time_scale
+	_setup_scene(p_battle)
+
+	var killed := false
+	for ev: Dictionary in p_battle["events"]:
+		if ev["type"] == "hit" and ev["killed"]:
+			killed = true
+	beats = [{"type": "intro", "dur": INTRO_DUR}]
+	for ev: Dictionary in p_battle["events"]:
+		beats.append({"type": "strike", "dur": STRIKE, "ev": ev, "applied": false})
+	beats.append({"type": "outro", "dur": OUTRO_KILL if killed else OUTRO,
+			"death_shown": false})
+	beat_index = 0
+	beat_elapsed = 0.0
+
+
+# --- INTERACTIVE mode (battle has "strikes") -------------------------------------
+
+
+func play_interactive(p_battle: Dictionary, p_game: Game) -> void:
+	interactive = true
+	game_ref = p_game
+	battle = p_battle
+	time_scale = 1.0   # QTEs can't be time-scaled: timing IS the game
+	_setup_scene(p_battle)
+	strikes = p_battle["strikes"]
+	strike_idx = -1
+	qte = {}
+	finish_called = false
+	phase = Phase.INTRO
+	phase_t = 0.0
+
+
+# --- lifecycle --------------------------------------------------------------------
+
+
 func skip() -> void:
-	if playing:
+	if playing and not interactive:  # no skipping an addition
 		_finish()
 
 
-# Hard stop without animation (used by Reset). Emits `finished` so any
-# coroutine awaiting the vignette resumes; callers re-check state after.
+# Hard stop (used by Reset): don't commit a half-played battle; the caller
+# resets all game state. Emits `finished` so awaiting coroutines resume
+# (they bail via main.gd's epoch guard).
 func abort() -> void:
 	if playing:
-		_finish()
+		_finish(false)
 
 
-func _finish() -> void:
+func _finish(commit := true) -> void:
+	if commit and interactive and game_ref != null and not finish_called:
+		finish_called = true
+		game_ref.finish_battle(battle["attacker"])
 	playing = false
 	visible = false
 	finished.emit()
 
 
+# --- input ------------------------------------------------------------------------
+
+
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
-		skip()
+		if interactive:
+			_press()
+		else:
+			skip()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if playing and interactive and event is InputEventKey and event.pressed \
+			and not event.echo and event.keycode == KEY_SPACE:
+		_press()
+
+
+func _press() -> void:
+	if not playing or not interactive or phase != Phase.QTE:
+		return
+	if qte["step_t"] < 0.0 or qte["step_done"]:
+		return  # ignore presses in the wind-up
+	var period: float = qte["spec"]["periods"][qte["step"]]
+	_record_press(grade_press(absf(qte["step_t"] - period), qte["spec"]))
+
+
+# --- frame driver -------------------------------------------------------------------
 
 
 func _process(delta: float) -> void:
 	if not playing:
 		return
 	var dt := minf(delta, 0.05) * time_scale
-	beat_elapsed += dt
-
-	var beat: Dictionary = beats[beat_index]
-	var t: float = minf(1.0, beat_elapsed / beat["dur"])
-	_update_beat(beat, t)
+	if interactive:
+		_step_interactive(dt)
+	else:
+		_step_replay(dt)
 	_update_common(dt)
 	queue_redraw()
 
-	if t >= 1.0:
-		beat_index += 1
-		beat_elapsed = 0.0
-		if beat_index >= beats.size():
-			_finish()
 
-
-func _update_beat(beat: Dictionary, t: float) -> void:
+func _step_replay(dt: float) -> void:
+	beat_elapsed += dt
+	var beat: Dictionary = beats[beat_index]
+	var t: float = minf(1.0, beat_elapsed / beat["dur"])
 	match beat["type"]:
 		"intro":
-			panel_alpha = t
-			var eased := _ease_out(t)
-			left["x"] = left["home"] - 80.0 * (1.0 - eased)
-			right["x"] = right["home"] + 80.0 * (1.0 - eased)
+			_update_intro(t)
 		"strike":
 			panel_alpha = 1.0
 			var ev: Dictionary = beat["ev"]
-			var actor := _fighter_of(ev["from"])
-			var victim := _fighter_of(ev["to"])
-			# lunge toward the victim, land the blow, retreat
 			var lunge: float
 			if t < IMPACT_AT:
 				lunge = t / IMPACT_AT
@@ -138,42 +257,183 @@ func _update_beat(beat: Dictionary, t: float) -> void:
 				lunge = 1.0
 			else:
 				lunge = 1.0 - (t - 0.6) / 0.4
-			actor["lunge"] = clampf(lunge, 0.0, 1.0)
+			_fighter_of(ev["from"])["lunge"] = clampf(lunge, 0.0, 1.0)
 			if not beat["applied"] and t >= IMPACT_AT:
 				beat["applied"] = true
-				_apply_impact(ev, victim)
+				_apply_impact(ev)
 		"outro":
-			for f: Dictionary in [left, right]:
-				if f["target_hp"] <= 0.0:
-					f["alpha"] = maxf(0.0, 1.0 - t * 1.6)
-					if not beat["death_shown"]:
-						beat["death_shown"] = true
-						_popup("%s falls!" % f["unit"].unit_name,
-								Vector2(W / 2.0, 60), Color("ffe94d"), 20)
-			var fade_start: float = 1.0 - 0.35 / beat["dur"]
-			panel_alpha = 1.0 if t <= fade_start \
-					else 1.0 - (t - fade_start) / (1.0 - fade_start)
+			_update_outro(beat, t, beat["dur"])
+	if t >= 1.0:
+		beat_index += 1
+		beat_elapsed = 0.0
+		if beat_index >= beats.size():
+			_finish()
 
 
-func _apply_impact(ev: Dictionary, victim: Dictionary) -> void:
+func _step_interactive(dt: float) -> void:
+	phase_t += dt
+	match phase:
+		Phase.INTRO:
+			var t := minf(1.0, phase_t / INTRO_DUR)
+			_update_intro(t)
+			if t >= 1.0:
+				_next_strike()
+		Phase.APPROACH:
+			panel_alpha = 1.0
+			var t := minf(1.0, phase_t / APPROACH_DUR)
+			_actor_fighter()["lunge"] = _ease_out(t)
+			if t >= 1.0:
+				_start_qte()
+		Phase.QTE:
+			_update_qte(dt)
+		Phase.IMPACT:
+			var t := minf(1.0, phase_t / IMPACT_DUR)
+			# hold the pose briefly, then retreat
+			_actor_fighter()["lunge"] = 1.0 if t < 0.35 else 1.0 - (t - 0.35) / 0.65
+			if t >= 1.0:
+				_next_strike()
+		Phase.OUTRO:
+			var t := minf(1.0, phase_t / outro_dur)
+			_update_outro(outro_beat, t, outro_dur)
+			if t >= 1.0:
+				_finish()
+
+
+func _actor_fighter() -> Dictionary:
+	return _fighter_of(strikes[strike_idx]["actor"])
+
+
+func _next_strike() -> void:
+	phase_t = 0.0
+	# find the next strike whose actor and target are both still alive
+	strike_idx += 1
+	while strike_idx < strikes.size() \
+			and (strikes[strike_idx]["actor"].hp <= 0
+			or strikes[strike_idx]["target"].hp <= 0):
+		strike_idx += 1
+
+	if strike_idx >= strikes.size():
+		# battle over: commit the result, then play the outro
+		if not finish_called:
+			finish_called = true
+			game_ref.finish_battle(battle["attacker"])
+		var killed: bool = left["target_hp"] <= 0.0 or right["target_hp"] <= 0.0
+		outro_dur = OUTRO_KILL if killed else OUTRO
+		outro_beat = {"death_shown": false}
+		phase = Phase.OUTRO
+	else:
+		phase = Phase.APPROACH
+
+
+func _start_qte() -> void:
+	var strike: Dictionary = strikes[strike_idx]
+	var actor: Unit = strike["actor"]
+	var offense: bool = actor.team == Unit.Team.PLAYER
+	var color: Color
+	if not offense:
+		color = GameData.qte_colors["defense"]
+	elif actor.u_class.is_magic:
+		color = GameData.qte_colors["magic"]
+	else:
+		color = GameData.qte_colors["physical"]
+	qte = {
+		"spec": actor.u_class.qte if offense else GameData.DEFENSE_QTE,
+		"kind": "offense" if offense else "defense",
+		"color": color,
+		"step": 0,
+		"step_t": -QTE_LEAD_IN,  # negative time = wind-up, ring not moving
+		"step_done": false,
+		"points": [],
+	}
+	phase = Phase.QTE
+	phase_t = 0.0
+
+
+func _update_qte(dt: float) -> void:
+	qte["step_t"] += dt
+	var period: float = qte["spec"]["periods"][qte["step"]]
+	if not qte["step_done"] and qte["step_t"] > period + qte["spec"]["good"]:
+		_record_press({"points": 0.0, "text": "Miss", "color": Color("8a90a0")})
+	if qte["step_done"]:
+		qte["step"] += 1
+		qte["step_done"] = false
+		if qte["step"] >= qte["spec"]["periods"].size():
+			_resolve_qte_strike()
+		else:
+			qte["step_t"] = -QTE_GAP
+
+
+func _record_press(grade: Dictionary) -> void:
+	qte["points"].append(grade["points"])
+	qte["step_done"] = true
+	_popup(grade["text"], RING_POS + Vector2(0, -38), grade["color"], 16, 0.7)
+
+
+func _resolve_qte_strike() -> void:
+	var strike: Dictionary = strikes[strike_idx]
+	var off_mult := 1.0
+	var def_mult := 1.0
+	var label := ""
+	if qte["kind"] == "offense":
+		var r := offense_result(qte["points"])
+		off_mult = r["mult"]
+		label = r["label"]
+	else:
+		var r := defense_result(qte["points"][0])
+		def_mult = r["mult"]
+		label = r["label"]
+	var ev: Dictionary = game_ref.strike(strike["actor"], strike["target"],
+			off_mult, def_mult, label)
+	_apply_impact(ev)
+	if label != "":
+		_popup(label, Vector2(W / 2.0, 84), qte["color"], 20, 1.0)
+	qte = {}
+	phase = Phase.IMPACT
+	phase_t = 0.0
+
+
+# --- shared beat pieces --------------------------------------------------------------
+
+
+func _update_intro(t: float) -> void:
+	panel_alpha = t
+	var eased := _ease_out(t)
+	left["x"] = left["home"] - 80.0 * (1.0 - eased)
+	right["x"] = right["home"] + 80.0 * (1.0 - eased)
+
+
+func _update_outro(beat: Dictionary, t: float, dur: float) -> void:
+	for f: Dictionary in [left, right]:
+		if f["target_hp"] <= 0.0:
+			f["alpha"] = maxf(0.0, 1.0 - t * 1.6)
+			if not beat["death_shown"]:
+				beat["death_shown"] = true
+				_popup("%s falls!" % f["unit"].unit_name, Vector2(W / 2.0, 60),
+						Color("ffe94d"), 20, 1.0)
+	var fade_start: float = 1.0 - 0.35 / dur
+	panel_alpha = 1.0 if t <= fade_start else 1.0 - (t - fade_start) / (1.0 - fade_start)
+
+
+func _apply_impact(ev: Dictionary) -> void:
+	var victim := _fighter_of(ev["to"])
 	var vx: float = victim["x"] + victim["side"] * 10.0
 	if ev["type"] == "miss":
 		victim["dodge"] = 0.35
-		_popup("Miss", Vector2(vx, 120), Color("aab0be"), 18)
+		_popup("Miss", Vector2(vx, 120), Color("aab0be"), 18, 0.9)
 	else:
 		victim["target_hp"] = maxf(0.0, victim["target_hp"] - ev["dmg"])
 		victim["shake"] = 0.4 if ev["crit"] else 0.28
 		if ev["crit"]:
 			flash = 0.22
-			_popup("CRITICAL!", Vector2(W / 2.0, 52), Color("ffe94d"), 22)
+			_popup("CRITICAL!", Vector2(W / 2.0, 52), Color("ffe94d"), 22, 0.9)
 		_popup(str(ev["dmg"]), Vector2(vx, 118),
 				Color("ffe94d") if ev["crit"] else Color.WHITE,
-				30 if ev["crit"] else 24)
+				30 if ev["crit"] else 24, 0.9)
 
 
-func _popup(text: String, pos: Vector2, color: Color, size_px: int) -> void:
+func _popup(text: String, pos: Vector2, color: Color, size_px: int, dur: float) -> void:
 	popups.append({"text": text, "pos": pos, "color": color,
-			"size": size_px, "age": 0.0, "dur": 0.9})
+			"size": size_px, "age": 0.0, "dur": dur})
 
 
 func _update_common(dt: float) -> void:
@@ -186,10 +446,6 @@ func _update_common(dt: float) -> void:
 	for p: Dictionary in popups:
 		p["age"] += dt
 	popups = popups.filter(func(p: Dictionary) -> bool: return p["age"] < p["dur"])
-
-
-func _fighter_of(unit: Unit) -> Dictionary:
-	return left if left["unit"] == unit else right
 
 
 func _ease_out(t: float) -> float:
@@ -208,13 +464,12 @@ func _fighter_x(f: Dictionary) -> float:
 	return x
 
 
-# --- drawing (all in panel-local coordinates, offset to screen centre) --------
+# --- drawing (all in panel-local coordinates, offset to screen centre) ----------------
 
 
 func _draw() -> void:
 	if not playing:
 		return
-	# dim the battlefield behind the panel
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.45 * panel_alpha))
 
 	var origin := (size - Vector2(W, H)) / 2.0
@@ -238,6 +493,8 @@ func _draw() -> void:
 		_draw_fighter(f, font)
 	_draw_hp_box(left, 22.0, font)
 	_draw_hp_box(right, W / 2.0 + 8.0, font)
+	if interactive and phase == Phase.QTE and not qte.is_empty():
+		_draw_qte(font)
 
 	for p: Dictionary in popups:
 		var k: float = p["age"] / p["dur"]
@@ -251,6 +508,35 @@ func _draw() -> void:
 		draw_rect(Rect2(0, 0, W, H), Color(1, 1, 1, a * (flash / 0.22) * 0.75))
 
 	draw_set_transform(Vector2.ZERO)  # reset for safety
+
+
+func _draw_qte(font: Font) -> void:
+	var color: Color = qte["color"]
+	color.a = panel_alpha
+	var period: float = qte["spec"]["periods"][qte["step"]]
+
+	# slight extra dim so the rings read clearly
+	draw_rect(Rect2(10, 10, W - 20, 190), Color(0.04, 0.05, 0.06, 0.35 * panel_alpha))
+
+	# step dots: one per press in this class's addition
+	var n: int = qte["spec"]["periods"].size()
+	for i in n:
+		var dx: float = RING_POS.x + (i - (n - 1) / 2.0) * 18.0
+		var dot := color if i < qte["step"] else Color(1, 1, 1, 0.25 * panel_alpha)
+		draw_circle(Vector2(dx, RING_POS.y - 52.0), 5.0, dot)
+
+	# target ring
+	draw_arc(RING_POS, RING_END, 0, TAU, 48, color, 3.0)
+
+	# shrinking ring (only once the wind-up is over)
+	if qte["step_t"] >= 0.0 and not qte["step_done"]:
+		var k: float = minf(1.0, qte["step_t"] / period)
+		var r := RING_START - (RING_START - RING_END) * k
+		draw_arc(RING_POS, r, 0, TAU, 48, color, 4.0)
+
+	var hint := "BRACE — SPACE / CLICK" if qte["kind"] == "defense" else "SPACE / CLICK"
+	draw_string(font, RING_POS + Vector2(-120, 48), hint,
+			HORIZONTAL_ALIGNMENT_CENTER, 240, 11, Color(1, 1, 1, 0.55 * panel_alpha))
 
 
 func _draw_ellipse(center: Vector2, radii: Vector2, color: Color) -> void:

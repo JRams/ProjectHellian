@@ -15,7 +15,8 @@ var turn: Unit.Team = Unit.Team.PLAYER
 var turn_count := 1
 var winner := NO_WINNER          # NO_WINNER, or a Unit.Team value
 var log: Array = []              # Array of {text, kind, turn}
-var last_battle := {}            # pending battle record for the vignette
+var last_battle := {}            # finished battle record for replay vignettes
+var pending_battle := {}         # unresolved battle awaiting interactive QTEs
 var rng := RandomNumberGenerator.new()
 
 var _next_unit_id := 1
@@ -37,6 +38,7 @@ func reset() -> void:
 	winner = NO_WINNER
 	log = []
 	last_battle = {}
+	pending_battle = {}
 	add_log("— Turn 1: Player phase —", "phase")
 
 
@@ -86,21 +88,53 @@ func attack(attacker: Unit, defender: Unit) -> Array:
 	var events := Combat.resolve_battle(attacker, defender, rng)
 	last_battle["events"] = events
 	for ev: Dictionary in events:
-		var from_u: Unit = ev["from"]
-		var to_u: Unit = ev["to"]
-		if ev["type"] == "miss":
-			add_log("%s (%s) misses %s." % [from_u.unit_name,
-					from_u.u_class.display_name, to_u.unit_name], "miss")
-		else:
-			var crit_text: String = " CRITICAL!" if ev["crit"] else ""
-			var kind := "player-hit" if from_u.team == Unit.Team.PLAYER else "enemy-hit"
-			add_log("%s (%s) hits %s for %d.%s" % [from_u.unit_name,
-					from_u.u_class.display_name, to_u.unit_name, ev["dmg"], crit_text], kind)
-			if ev["killed"]:
-				add_log("%s falls!" % to_u.unit_name, "death")
+		log_event(ev)
 	attacker.acted = true
 	check_winner()
 	return events
+
+
+func log_event(ev: Dictionary) -> void:
+	var from_u: Unit = ev["from"]
+	var to_u: Unit = ev["to"]
+	if ev["type"] == "miss":
+		add_log("%s (%s) misses %s." % [from_u.unit_name,
+				from_u.u_class.display_name, to_u.unit_name], "miss")
+	else:
+		var crit_text: String = " CRITICAL!" if ev["crit"] else ""
+		var qte_text: String = " [%s]" % ev["qte"] if ev.get("qte", "") != "" else ""
+		var kind := "player-hit" if from_u.team == Unit.Team.PLAYER else "enemy-hit"
+		add_log("%s (%s) hits %s for %d.%s%s" % [from_u.unit_name,
+				from_u.u_class.display_name, to_u.unit_name, ev["dmg"],
+				crit_text, qte_text], kind)
+		if ev["killed"]:
+			add_log("%s falls!" % to_u.unit_name, "death")
+
+
+# --- Interactive battles (QTE-driven, resolved strike by strike) -------------
+# The vignette drives these: begin_battle plans the strike order, the
+# vignette calls strike() once per blow with the player's QTE multipliers,
+# then finish_battle() closes the exchange.
+
+
+func begin_battle(attacker: Unit, defender: Unit) -> Dictionary:
+	return {
+		"attacker": attacker, "defender": defender,
+		"attacker_hp_before": attacker.hp, "defender_hp_before": defender.hp,
+		"strikes": Combat.plan_strikes(attacker, defender),
+	}
+
+
+func strike(actor: Unit, target: Unit, off_mult: float, def_mult: float,
+		qte_grade: String) -> Dictionary:
+	var ev := Combat.resolve_strike(actor, target, rng, off_mult, def_mult, qte_grade)
+	log_event(ev)
+	return ev
+
+
+func finish_battle(attacker: Unit) -> void:
+	attacker.acted = true
+	check_winner()
 
 
 func heal(healer: Unit, target: Unit) -> Dictionary:
@@ -115,10 +149,16 @@ func hold(unit: Unit) -> void:
 	unit.acted = true
 
 
-# Hand the pending battle record to the UI exactly once.
+# Hand the finished battle record to the UI exactly once.
 func take_last_battle() -> Dictionary:
 	var b := last_battle
 	last_battle = {}
+	return b
+
+
+func take_pending_battle() -> Dictionary:
+	var b := pending_battle
+	pending_battle = {}
 	return b
 
 
@@ -172,7 +212,10 @@ func check_winner() -> void:
 
 # Execute one AI-planned action for the next unacted unit on `team`.
 # Returns the unit that acted, or null if the whole team has acted.
-func step_ai(team: Unit.Team) -> Unit:
+# With `interactive`, attacks are not resolved here: the planned battle is
+# parked in pending_battle for the UI to run with defensive QTEs (the unit
+# is only marked acted when the vignette calls finish_battle).
+func step_ai(team: Unit.Team, interactive := false) -> Unit:
 	if winner != NO_WINNER:
 		return null
 	var unit: Unit = null
@@ -187,7 +230,10 @@ func step_ai(team: Unit.Team) -> Unit:
 	if plan["move"] != null:
 		move_unit(unit, plan["move"])
 	if plan["attack"] != null:
-		attack(unit, plan["attack"])
+		if interactive:
+			pending_battle = begin_battle(unit, plan["attack"])
+		else:
+			attack(unit, plan["attack"])
 	elif plan["heal"] != null:
 		heal(unit, plan["heal"])
 	else:

@@ -43,8 +43,14 @@ then Import → `godot/project.godot` → F5. Headless battle-simulation test:
   a battle forecast before you commit.
 - **Battle vignettes** — Fire Emblem style combat cut-ins overlaid on the
   battlefield: fighters lunge, damage numbers pop, HP bars drain, crits
-  flash, misses dodge, deaths fade. Click a vignette to skip it, or turn
-  animations off entirely with the "Battle anims" toggle.
+  flash, misses dodge, deaths fade. Turn animations off entirely with the
+  "Battle anims" toggle.
+- **Quick Time Events** — Legend of Dragoon style additions in every
+  battle the player fights: time Space/click presses against a shrinking
+  ring, one per step of your class's unique attack rhythm. Perfect chains
+  deal **MAX! (1.5×)** damage; a well-timed brace halves an incoming hit.
+  Ring colors code the combat type: blue physical, green magic,
+  red defense. AI-vs-AI simulation stays fully automatic.
 - **Playable + auto-simulation** — control the blue army yourself against
   the enemy AI, or press **Simulate Battle** and watch the AI play both
   sides to a conclusion. The AI scores every reachable (tile, target) pair,

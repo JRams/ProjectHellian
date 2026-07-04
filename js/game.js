@@ -35,6 +35,7 @@ class Game {
     this.winner = null;
     this.log = [];
     this.lastBattle = null;
+    this.pendingBattle = null;
     this.rng = Math.random;
     this.addLog(`— Turn 1: Player phase —`, "phase");
   }
@@ -70,20 +71,47 @@ class Game {
     };
     const events = resolveBattle(attacker, defender, this.rng);
     this.lastBattle.events = events;
-    for (const ev of events) {
-      if (ev.type === "miss") {
-        this.addLog(`${ev.from.name} (${ev.from.cls.name}) misses ${ev.to.name}.`, "miss");
-      } else {
-        const critText = ev.crit ? " CRITICAL!" : "";
-        this.addLog(
-          `${ev.from.name} (${ev.from.cls.name}) hits ${ev.to.name} for ${ev.dmg}.${critText}`,
-          ev.from.team === "player" ? "player-hit" : "enemy-hit");
-        if (ev.killed) this.addLog(`${ev.to.name} falls!`, "death");
-      }
-    }
+    for (const ev of events) this.logEvent(ev);
     attacker.acted = true;
     this.checkWinner();
     return events;
+  }
+
+  logEvent(ev) {
+    if (ev.type === "miss") {
+      this.addLog(`${ev.from.name} (${ev.from.cls.name}) misses ${ev.to.name}.`, "miss");
+    } else {
+      const critText = ev.crit ? " CRITICAL!" : "";
+      const qteText = ev.qte ? ` [${ev.qte}]` : "";
+      this.addLog(
+        `${ev.from.name} (${ev.from.cls.name}) hits ${ev.to.name} for ${ev.dmg}.${critText}${qteText}`,
+        ev.from.team === "player" ? "player-hit" : "enemy-hit");
+      if (ev.killed) this.addLog(`${ev.to.name} falls!`, "death");
+    }
+  }
+
+  // --- Interactive battles (QTE-driven, resolved strike by strike) ---------
+  // The vignette drives these: beginBattle plans the strike order, the
+  // vignette calls strike() once per blow with the player's QTE multipliers,
+  // then finishBattle() closes the exchange.
+
+  beginBattle(attacker, defender) {
+    return {
+      attacker, defender,
+      preHp: { attacker: attacker.hp, defender: defender.hp },
+      strikes: planStrikes(attacker, defender),
+    };
+  }
+
+  strike(actor, target, offMult, defMult, qteGrade) {
+    const ev = resolveStrike(actor, target, this.rng, offMult, defMult, qteGrade);
+    this.logEvent(ev);
+    return ev;
+  }
+
+  finishBattle(attacker) {
+    attacker.acted = true;
+    this.checkWinner();
   }
 
   heal(healer, target) {
@@ -101,6 +129,12 @@ class Game {
   takeLastBattle() {
     const b = this.lastBattle;
     this.lastBattle = null;
+    return b;
+  }
+
+  takePendingBattle() {
+    const b = this.pendingBattle;
+    this.pendingBattle = null;
     return b;
   }
 
@@ -149,14 +183,20 @@ class Game {
 
   // Execute one AI-planned action for the next unacted unit on `team`.
   // Returns the unit that acted, or null if the whole team has acted.
-  stepAI(team) {
+  // With `interactive`, attacks are not resolved here: the planned battle is
+  // parked in pendingBattle for the UI to run with defensive QTEs (the unit
+  // is only marked acted when the vignette calls finishBattle).
+  stepAI(team, interactive = false) {
     if (this.winner) return null;
     const unit = this.livingUnits(team).find(u => !u.acted);
     if (!unit) return null;
 
     const plan = planAction(unit, this.units, this.turnCount);
     if (plan.move) this.moveUnit(unit, plan.move.x, plan.move.y);
-    if (plan.attack)      this.attack(unit, plan.attack);
+    if (plan.attack) {
+      if (interactive) this.pendingBattle = this.beginBattle(unit, plan.attack);
+      else this.attack(unit, plan.attack);
+    }
     else if (plan.heal)   this.heal(unit, plan.heal);
     else                  this.wait(unit);
     return unit;

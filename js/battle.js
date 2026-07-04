@@ -1,19 +1,53 @@
 // ---------------------------------------------------------------
 // Battle vignette: the Fire Emblem style combat cut-in.
-// Combat is resolved instantly by the core (combat.js); this overlay
-// REPLAYS the recorded events as an animation — lunges, damage popups,
-// draining HP bars, crit flashes, dodges, deaths. Click to skip.
+// Two modes:
+//  - REPLAY: combat already resolved by the core; the overlay replays the
+//    recorded events (used for AI-vs-AI simulation).
+//  - INTERACTIVE: Legend of Dragoon style additions. The battle resolves
+//    strike by strike DURING the vignette: before each blow lands, the
+//    player times button presses (Space / click) against a shrinking ring.
+//    Offense QTEs scale damage dealt 0.75x-1.5x; the defensive brace cuts
+//    incoming damage to 50/75/100%. Ring color = combat type:
+//    blue physical, green magic, red defense.
 // ---------------------------------------------------------------
 
 const VIGNETTE = {
   W: 560, H: 300,
   INTRO: 0.35,       // seconds: panel fade-in, fighters slide in
-  STRIKE: 0.95,      // seconds per attack event
-  IMPACT_AT: 0.35,   // fraction of a strike beat where the blow lands
+  STRIKE: 0.95,      // seconds per attack event (replay mode)
+  IMPACT_AT: 0.35,   // fraction of a replay strike beat where the blow lands
+  APPROACH: 0.33,    // interactive: lunge-in before the QTE
+  IMPACT: 0.8,       // interactive: blow lands, then retreat
   OUTRO: 0.6,
   OUTRO_KILL: 1.1,
   HP_DRAIN_RATE: 30, // HP per second the displayed bar drains
+  QTE_LEAD_IN: 0.45, // pause before the first ring starts shrinking
+  QTE_GAP: 0.3,      // pause between presses of a multi-step addition
+  RING_X: 280, RING_Y: 105, RING_START: 74, RING_END: 26,
 };
+
+// --- QTE grading (pure functions, also used by tests) -----------------------
+
+function gradePress(err, spec) {
+  if (err <= spec.perfect) return { points: 1, text: "PERFECT!", color: "#ffe94d" };
+  if (err <= spec.good) return { points: 0.6, text: "Good", color: "#ffffff" };
+  return { points: 0, text: "Miss", color: "#8a90a0" };
+}
+
+// Offense: average press quality maps to a damage multiplier.
+function offenseResult(points) {
+  const avg = points.reduce((a, b) => a + b, 0) / points.length;
+  const mult = 0.75 + 0.75 * avg;
+  const label = avg >= 0.999 ? "MAX!" : avg >= 0.6 ? "Great" : avg > 0 ? "Good" : "Whiffed";
+  return { mult, label };
+}
+
+// Defense: one well-timed brace halves the incoming hit.
+function defenseResult(points) {
+  if (points >= 1) return { mult: 0.5, label: "Blocked!" };
+  if (points > 0) return { mult: 0.75, label: "Braced" };
+  return { mult: 1.0, label: null };
+}
 
 class BattleVignette {
   constructor(canvas) {
@@ -22,18 +56,23 @@ class BattleVignette {
     canvas.width = VIGNETTE.W;
     canvas.height = VIGNETTE.H;
     this.playing = false;
-    canvas.addEventListener("click", () => this.skip());
+    this.interactive = false;
+    canvas.addEventListener("click", () => {
+      if (this.interactive) this.press();
+      else this.skip();
+    });
+    window.addEventListener("keydown", e => {
+      if (e.code === "Space" && this.playing && this.interactive) {
+        e.preventDefault();
+        this.press();
+      }
+    });
     this.tick = this.tick.bind(this);
   }
 
-  // battle = { attacker, defender, preHp: {attacker, defender}, events }
-  // timeScale > 1 plays the whole vignette proportionally faster (used by
-  // the Fast simulation speed so animations don't dominate the run time).
-  play(battle, onDone, timeScale = 1) {
-    this.battle = battle;
-    this.onDone = onDone;
-    this.timeScale = timeScale;
-    this.playing = true;
+  // --- shared setup -----------------------------------------------------
+
+  setupScene(battle) {
     const mkFighter = (unit, side, hp) => ({
       unit, side,
       home: side === "L" ? 150 : 410,
@@ -50,6 +89,21 @@ class BattleVignette {
     this.popups = [];
     this.flash = 0;
     this.panelAlpha = 0;
+    this.lastTime = performance.now();
+    this.canvas.classList.remove("hidden");
+  }
+
+  fighterOf(unit) { return this.left.unit === unit ? this.left : this.right; }
+
+  // --- REPLAY mode (battle = {attacker, defender, preHp, events}) --------
+
+  play(battle, onDone, timeScale = 1) {
+    this.interactive = false;
+    this.game = null;
+    this.onDone = onDone;
+    this.timeScale = timeScale;
+    this.playing = true;
+    this.setupScene(battle);
 
     const killed = battle.events.some(e => e.killed);
     this.beats = [{ type: "intro", dur: VIGNETTE.INTRO }];
@@ -57,77 +111,235 @@ class BattleVignette {
       this.beats.push({ type: "strike", dur: VIGNETTE.STRIKE, ev, applied: false });
     }
     this.beats.push({ type: "outro", dur: killed ? VIGNETTE.OUTRO_KILL : VIGNETTE.OUTRO, deathShown: false });
-
     this.beatIndex = 0;
-    this.lastTime = performance.now();
     this.beatElapsed = 0;
-    this.canvas.classList.remove("hidden");
     requestAnimationFrame(this.tick);
   }
 
-  fighterOf(unit) { return this.left.unit === unit ? this.left : this.right; }
+  // --- INTERACTIVE mode (battle = {attacker, defender, preHp, strikes}) --
+
+  playInteractive(battle, game, onDone) {
+    this.interactive = true;
+    this.game = game;
+    this.battle = battle;
+    this.onDone = onDone;
+    this.timeScale = 1;   // QTEs can't be time-scaled: timing IS the game
+    this.playing = true;
+    this.setupScene(battle);
+    this.strikes = battle.strikes;
+    this.strikeIdx = -1;
+    this.qte = null;
+    this.finishCalled = false;
+    this.phase = "intro";
+    this.phaseT = 0;
+    requestAnimationFrame(this.tick);
+  }
+
+  // --- frame driver -------------------------------------------------------
 
   tick(now) {
     if (!this.playing) return;
     const dt = Math.min(0.05, (now - this.lastTime) / 1000) * this.timeScale;
     this.lastTime = now;
-    this.beatElapsed += dt;
 
-    const beat = this.beats[this.beatIndex];
-    const t = Math.min(1, this.beatElapsed / beat.dur);
-    this.updateBeat(beat, t, dt);
+    if (this.interactive) this.stepInteractive(dt);
+    else this.stepReplay(dt);
     this.updateCommon(dt);
     this.draw();
+    if (this.playing) requestAnimationFrame(this.tick);
+  }
 
+  stepReplay(dt) {
+    this.beatElapsed += dt;
+    const beat = this.beats[this.beatIndex];
+    const t = Math.min(1, this.beatElapsed / beat.dur);
+    this.updateReplayBeat(beat, t);
     if (t >= 1) {
       this.beatIndex++;
       this.beatElapsed = 0;
-      if (this.beatIndex >= this.beats.length) { this.finish(); return; }
+      if (this.beatIndex >= this.beats.length) this.finish();
     }
-    requestAnimationFrame(this.tick);
   }
 
-  updateBeat(beat, t, dt) {
+  updateReplayBeat(beat, t) {
     if (beat.type === "intro") {
-      this.panelAlpha = t;
-      // fighters slide in from off-panel
-      const ease = 1 - (1 - t) * (1 - t);
-      this.left.x = this.left.home - 80 * (1 - ease);
-      this.right.x = this.right.home + 80 * (1 - ease);
+      this.updateIntro(t);
     } else if (beat.type === "strike") {
       this.panelAlpha = 1;
       const actor = this.fighterOf(beat.ev.from);
-      const victim = this.fighterOf(beat.ev.to);
-      // lunge toward the victim, land the blow, retreat
       const ia = VIGNETTE.IMPACT_AT;
       let lunge;
-      if (t < ia) lunge = t / ia;                       // wind up + close in
-      else if (t < 0.6) lunge = 1;                      // in their face
-      else lunge = 1 - (t - 0.6) / 0.4;                 // retreat
+      if (t < ia) lunge = t / ia;
+      else if (t < 0.6) lunge = 1;
+      else lunge = 1 - (t - 0.6) / 0.4;
       actor.lunge = Math.max(0, Math.min(1, lunge));
-
       if (!beat.applied && t >= ia) {
         beat.applied = true;
-        this.applyImpact(beat.ev, actor, victim);
+        this.applyImpact(beat.ev);
       }
     } else if (beat.type === "outro") {
-      // fade out any slain fighter, then the whole panel
-      for (const f of [this.left, this.right]) {
-        if (f.targetHp <= 0) {
-          f.alpha = Math.max(0, 1 - t * 1.6);
-          if (!beat.deathShown) {
-            beat.deathShown = true;
-            this.popups.push({ text: `${f.unit.name} falls!`, x: VIGNETTE.W / 2,
-              y: 60, color: "#ffe94d", size: 20, age: 0, dur: 1.0 });
-          }
-        }
-      }
-      const fadeStart = 1 - 0.35 / beat.dur;
-      this.panelAlpha = t > fadeStart ? 1 - (t - fadeStart) / (1 - fadeStart) : 1;
+      this.updateOutro(beat, t);
     }
   }
 
-  applyImpact(ev, actor, victim) {
+  stepInteractive(dt) {
+    this.phaseT += dt;
+    const strike = this.strikes[this.strikeIdx];
+    switch (this.phase) {
+      case "intro": {
+        const t = Math.min(1, this.phaseT / VIGNETTE.INTRO);
+        this.updateIntro(t);
+        if (t >= 1) this.nextStrike();
+        break;
+      }
+      case "approach": {
+        this.panelAlpha = 1;
+        const t = Math.min(1, this.phaseT / VIGNETTE.APPROACH);
+        this.fighterOf(strike.actor).lunge = easeOutQuad(t);
+        if (t >= 1) this.startQTE(strike);
+        break;
+      }
+      case "qte":
+        this.updateQTE(dt);
+        break;
+      case "impact": {
+        const t = Math.min(1, this.phaseT / VIGNETTE.IMPACT);
+        // hold the pose briefly, then retreat
+        this.fighterOf(strike.actor).lunge = t < 0.35 ? 1 : 1 - (t - 0.35) / 0.65;
+        if (t >= 1) this.nextStrike();
+        break;
+      }
+      case "outro": {
+        const t = Math.min(1, this.phaseT / this.outroDur);
+        this.updateOutro(this.outroBeat, t);
+        if (t >= 1) this.finish();
+        break;
+      }
+    }
+  }
+
+  nextStrike() {
+    this.phaseT = 0;
+    // find the next strike whose actor and target are both still alive
+    do { this.strikeIdx++; } while (
+      this.strikeIdx < this.strikes.length &&
+      (this.strikes[this.strikeIdx].actor.hp <= 0 ||
+       this.strikes[this.strikeIdx].target.hp <= 0));
+
+    if (this.strikeIdx >= this.strikes.length) {
+      // battle over: commit the result, then play the outro
+      if (!this.finishCalled) {
+        this.finishCalled = true;
+        this.game.finishBattle(this.battle.attacker);
+      }
+      const killed = this.left.targetHp <= 0 || this.right.targetHp <= 0;
+      this.outroDur = killed ? VIGNETTE.OUTRO_KILL : VIGNETTE.OUTRO;
+      this.outroBeat = { deathShown: false, dur: this.outroDur };
+      this.phase = "outro";
+    } else {
+      this.phase = "approach";
+    }
+  }
+
+  startQTE(strike) {
+    const offense = strike.actor.team === "player";
+    const spec = offense ? strike.actor.cls.qte : DEFENSE_QTE;
+    this.qte = {
+      spec,
+      kind: offense ? "offense" : "defense",
+      color: !offense ? QTE_COLORS.defense
+        : (strike.actor.cls.magic ? QTE_COLORS.magic : QTE_COLORS.physical),
+      step: 0,
+      stepT: -VIGNETTE.QTE_LEAD_IN,  // negative time = wind-up, ring not moving
+      stepDone: false,
+      points: [],
+    };
+    this.phase = "qte";
+    this.phaseT = 0;
+  }
+
+  updateQTE(dt) {
+    const q = this.qte;
+    q.stepT += dt;
+    const period = q.spec.periods[q.step];
+    if (!q.stepDone && q.stepT > period + q.spec.good) {
+      this.recordPress({ points: 0, text: "Miss", color: "#8a90a0" });
+    }
+    if (q.stepDone) {
+      q.step++;
+      q.stepDone = false;
+      if (q.step >= q.spec.periods.length) this.resolveQTEStrike();
+      else q.stepT = -VIGNETTE.QTE_GAP;
+    }
+  }
+
+  press() {
+    if (!this.playing || !this.interactive || this.phase !== "qte") return;
+    const q = this.qte;
+    if (q.stepT < 0 || q.stepDone) return;  // ignore presses in the wind-up
+    const period = q.spec.periods[q.step];
+    this.recordPress(gradePress(Math.abs(q.stepT - period), q.spec));
+  }
+
+  recordPress(grade) {
+    const q = this.qte;
+    q.points.push(grade.points);
+    q.stepDone = true;
+    this.popups.push({ text: grade.text, x: VIGNETTE.RING_X, y: VIGNETTE.RING_Y - 38,
+      color: grade.color, size: 16, age: 0, dur: 0.7 });
+  }
+
+  resolveQTEStrike() {
+    const q = this.qte;
+    const strike = this.strikes[this.strikeIdx];
+    let offMult = 1, defMult = 1, label = null;
+    if (q.kind === "offense") {
+      const r = offenseResult(q.points);
+      offMult = r.mult;
+      label = r.label;
+    } else {
+      const r = defenseResult(q.points[0]);
+      defMult = r.mult;
+      label = r.label;
+    }
+    const ev = this.game.strike(strike.actor, strike.target, offMult, defMult, label);
+    this.applyImpact(ev);
+    if (label) {
+      this.popups.push({ text: label, x: VIGNETTE.W / 2, y: 84,
+        color: q.color, size: 20, age: 0, dur: 1.0 });
+    }
+    this.qte = null;
+    this.phase = "impact";
+    this.phaseT = 0;
+  }
+
+  // --- shared beat pieces --------------------------------------------------
+
+  updateIntro(t) {
+    this.panelAlpha = t;
+    const ease = easeOutQuad(t);
+    this.left.x = this.left.home - 80 * (1 - ease);
+    this.right.x = this.right.home + 80 * (1 - ease);
+  }
+
+  updateOutro(beat, t) {
+    for (const f of [this.left, this.right]) {
+      if (f.targetHp <= 0) {
+        f.alpha = Math.max(0, 1 - t * 1.6);
+        if (!beat.deathShown) {
+          beat.deathShown = true;
+          this.popups.push({ text: `${f.unit.name} falls!`, x: VIGNETTE.W / 2,
+            y: 60, color: "#ffe94d", size: 20, age: 0, dur: 1.0 });
+        }
+      }
+    }
+    const dur = beat.dur || this.outroDur;
+    const fadeStart = 1 - 0.35 / dur;
+    this.panelAlpha = t > fadeStart ? 1 - (t - fadeStart) / (1 - fadeStart) : 1;
+  }
+
+  applyImpact(ev) {
+    const victim = this.fighterOf(ev.to);
     const vx = victim.x + (victim.side === "L" ? -10 : 10);
     if (ev.type === "miss") {
       victim.dodge = 0.35;
@@ -198,6 +410,7 @@ class BattleVignette {
     for (const f of [this.left, this.right]) this.drawFighter(f);
     this.drawHpBox(this.left, 22);
     this.drawHpBox(this.right, W / 2 + 8);
+    if (this.interactive && this.phase === "qte" && this.qte) this.drawQTE();
 
     // popups
     for (const p of this.popups) {
@@ -217,6 +430,52 @@ class BattleVignette {
       ctx.fillRect(0, 0, W, H);
     }
     ctx.restore();
+  }
+
+  drawQTE() {
+    const ctx = this.ctx;
+    const q = this.qte;
+    const { RING_X, RING_Y, RING_START, RING_END } = VIGNETTE;
+    const period = q.spec.periods[q.step];
+
+    // slight extra dim so the rings read clearly
+    ctx.fillStyle = "rgba(10,12,16,0.35)";
+    ctx.fillRect(10, 10, VIGNETTE.W - 20, 190);
+
+    // step dots: one per press in this class's addition
+    const n = q.spec.periods.length;
+    for (let i = 0; i < n; i++) {
+      const dx = RING_X + (i - (n - 1) / 2) * 18;
+      ctx.beginPath();
+      ctx.arc(dx, RING_Y - 52, 5, 0, Math.PI * 2);
+      ctx.fillStyle = i < q.step ? q.color : "rgba(255,255,255,0.25)";
+      ctx.fill();
+    }
+
+    // target ring
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = q.color;
+    ctx.beginPath();
+    ctx.arc(RING_X, RING_Y, RING_END, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // shrinking ring (only once the wind-up is over)
+    if (q.stepT >= 0 && !q.stepDone) {
+      const k = Math.min(1, q.stepT / period);
+      const r = RING_START - (RING_START - RING_END) * k;
+      ctx.lineWidth = 4;
+      ctx.globalAlpha = this.panelAlpha * 0.95;
+      ctx.beginPath();
+      ctx.arc(RING_X, RING_Y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = this.panelAlpha;
+    }
+
+    ctx.fillStyle = "rgba(255,255,255,0.55)";
+    ctx.font = "11px 'Segoe UI', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(q.kind === "defense" ? "BRACE — SPACE / CLICK" : "SPACE / CLICK",
+      RING_X, RING_Y + 48);
   }
 
   drawFighter(f) {
@@ -254,7 +513,6 @@ class BattleVignette {
     ctx.fillStyle = "#9aa0ae";
     ctx.font = "11px 'Segoe UI', sans-serif";
     ctx.fillText(`${f.unit.cls.name} · ${f.unit.cls.weapon}`, bx + 10, by + 33);
-    // bar
     const barW = w - 62;
     ctx.fillStyle = "rgba(0,0,0,0.6)";
     ctx.fillRect(bx + 10, by + 40, barW, 10);
@@ -270,11 +528,17 @@ class BattleVignette {
   // --- lifecycle --------------------------------------------------------
 
   skip() {
-    if (!this.playing) return;
+    if (!this.playing || this.interactive) return; // no skipping an addition
     this.finish();
   }
 
   finish() {
+    // Interactive battles must always commit their result, even on abort
+    // paths that reach finish() early.
+    if (this.interactive && this.game && !this.finishCalled) {
+      this.finishCalled = true;
+      this.game.finishBattle(this.battle.attacker);
+    }
     this.playing = false;
     this.canvas.classList.add("hidden");
     if (this.onDone) {
@@ -287,6 +551,7 @@ class BattleVignette {
   // Hard stop (used by Reset): hide without firing the continuation.
   abort() {
     this.playing = false;
+    this.interactive = false;
     this.onDone = null;
     this.canvas.classList.add("hidden");
   }

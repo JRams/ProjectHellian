@@ -38,30 +38,46 @@ function battleForecast(attacker, defender) {
   };
 }
 
-// Resolve a full battle. Returns an array of event objects for the log /
-// renderer. Order: attacker strike, counter, then follow-up by the faster.
+// The full strike order of a battle: attacker, counter (if the defender's
+// range allows), then a follow-up by whichever side doubles. Strikes whose
+// actor or target has died by the time they come up are skipped at
+// resolution time.
+function planStrikes(attacker, defender) {
+  const strikes = [{ actor: attacker, target: defender }];
+  const counter = canCounter(defender, attacker);
+  if (counter) strikes.push({ actor: defender, target: attacker });
+  if (doubles(attacker, defender)) {
+    strikes.push({ actor: attacker, target: defender });
+  } else if (counter && doubles(defender, attacker)) {
+    strikes.push({ actor: defender, target: attacker });
+  }
+  return strikes;
+}
+
+// Resolve ONE strike, mutating the target's HP.
+// offMult scales damage dealt (the attacker's QTE result); defMult scales
+// damage taken (the defender's QTE result). Both default to neutral so
+// AI-vs-AI battles behave exactly as before QTEs existed.
+// `qte` is an optional grade label carried into the event for the log.
+function resolveStrike(actor, target, rng, offMult = 1, defMult = 1, qte = null) {
+  const s = strikeStats(actor, target);
+  if (Math.floor(rng() * 100) >= s.hit) {
+    return { type: "miss", from: actor, to: target, qte };
+  }
+  const isCrit = Math.floor(rng() * 100) < s.crit;
+  const dmg = Math.max(0, Math.round((isCrit ? s.dmg * 3 : s.dmg) * offMult * defMult));
+  target.hp = Math.max(0, target.hp - dmg);
+  return { type: "hit", from: actor, to: target, dmg, crit: isCrit,
+    killed: target.hp === 0, qte };
+}
+
+// Resolve a full battle instantly at neutral multipliers (AI vs AI, or
+// animations disabled). Returns the event list for the log / replay.
 function resolveBattle(attacker, defender, rng) {
   const events = [];
-  const roll = () => Math.floor(rng() * 100);
-
-  function strike(a, d) {
-    if (a.hp <= 0 || d.hp <= 0) return;
-    const s = strikeStats(a, d);
-    if (roll() >= s.hit) {
-      events.push({ type: "miss", from: a, to: d });
-      return;
-    }
-    const isCrit = roll() < s.crit;
-    const dmg = isCrit ? s.dmg * 3 : s.dmg;
-    d.hp = Math.max(0, d.hp - dmg);
-    events.push({ type: "hit", from: a, to: d, dmg, crit: isCrit, killed: d.hp === 0 });
-  }
-
-  strike(attacker, defender);
-  if (defender.hp > 0 && canCounter(defender, attacker)) strike(defender, attacker);
-  if (doubles(attacker, defender)) strike(attacker, defender);
-  else if (defender.hp > 0 && canCounter(defender, attacker) && doubles(defender, attacker)) {
-    strike(defender, attacker);
+  for (const s of planStrikes(attacker, defender)) {
+    if (s.actor.hp <= 0 || s.target.hp <= 0) continue;
+    events.push(resolveStrike(s.actor, s.target, rng));
   }
   return events;
 }

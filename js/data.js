@@ -38,6 +38,14 @@ const TERRAIN_CHARS = {
   "~": "water", "=": "bridge", "F": "fort",
 };
 
+// Quick Time Events (Legend of Dragoon style "additions").
+// Each class has a unique attack pattern: `periods` is the seconds between
+// successive press targets (one entry per press); `perfect`/`good` are the
+// timing tolerances in seconds. Defense is one universal well-timed brace.
+// Ring colors follow combat type: blue physical, green magic, red defense.
+const DEFENSE_QTE = { periods: [0.7], perfect: 0.06, good: 0.14 };
+const QTE_COLORS = { physical: "#4a90d9", magic: "#3ecf6e", defense: "#e04848" };
+
 // Unit classes. range = attack distances (manhattan). mt/hit/crit describe
 // the class's default weapon. magic damage targets res instead of def.
 const CLASSES = {
@@ -46,30 +54,35 @@ const CLASSES = {
     hp: 30, str: 12, mag: 0, skl: 6, spd: 3, def: 13, res: 3, mov: 4,
     range: [1], mt: 8, hit: 80, crit: 0,
     desc: "Armored wall. Hits hard, moves slow, shrugs off physical damage.",
+    qte: { periods: [1.1], perfect: 0.07, good: 0.16 },
   },
   Mercenary: {
     name: "Mercenary", icon: "M", weapon: "Steel Sword",
     hp: 26, str: 9, mag: 0, skl: 13, spd: 11, def: 6, res: 4, mov: 5,
     range: [1], mt: 7, hit: 95, crit: 10,
     desc: "Balanced swordfighter. Accurate, fast, doubles slower foes.",
+    qte: { periods: [0.55, 0.55, 0.55], perfect: 0.055, good: 0.12 },
   },
   Cavalier: {
     name: "Cavalier", icon: "C", weapon: "Iron Lance",
     hp: 27, str: 10, mag: 0, skl: 8, spd: 8, def: 9, res: 4, mov: 7,
     range: [1], mt: 8, hit: 85, crit: 0, mounted: true,
     desc: "Mounted lancer. High movement, but mountains block the horse.",
+    qte: { periods: [0.7, 0.45], perfect: 0.06, good: 0.13 },
   },
   Archer: {
     name: "Archer", icon: "A", weapon: "Iron Bow",
     hp: 23, str: 9, mag: 0, skl: 12, spd: 7, def: 5, res: 3, mov: 5,
     range: [2], mt: 7, hit: 90, crit: 5,
     desc: "Attacks at range 2 only. Safe from melee counters, weak up close.",
+    qte: { periods: [0.8], perfect: 0.04, good: 0.09 },
   },
   Mage: {
     name: "Mage", icon: "W", weapon: "Fire Tome",
     hp: 21, str: 2, mag: 12, skl: 9, spd: 8, def: 3, res: 10, mov: 5,
     range: [1, 2], mt: 6, hit: 90, crit: 0, magic: true,
     desc: "Magic damage targets resistance. Melts armored units.",
+    qte: { periods: [0.9, 0.5], perfect: 0.06, good: 0.13 },
   },
   Healer: {
     name: "Healer", icon: "H", weapon: "Heal Staff",
@@ -82,6 +95,7 @@ const CLASSES = {
     hp: 23, str: 8, mag: 0, skl: 10, spd: 13, def: 5, res: 9, mov: 7,
     range: [1], mt: 6, hit: 90, crit: 5, flier: true,
     desc: "Flier: ignores all terrain. Fast and evasive, but fragile.",
+    qte: { periods: [0.45, 0.4, 0.35], perfect: 0.05, good: 0.11 },
   },
 };
 

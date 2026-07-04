@@ -26,6 +26,8 @@ var is_flier := false    # ignores all terrain
 var heal_range: Array = []
 var heal_power := 0
 var description := ""
+# QTE "addition" pattern: {periods: Array[float], perfect: float, good: float}
+var qte: Dictionary = {}
 
 
 # Build from a dictionary so game_data.gd reads like the JS class table.
@@ -51,3 +53,4 @@ func _init(d: Dictionary = {}) -> void:
 	heal_range = d.get("heal_range", [])
 	heal_power = d.get("heal_power", 0)
 	description = d.get("description", "")
+	qte = d.get("qte", {})
