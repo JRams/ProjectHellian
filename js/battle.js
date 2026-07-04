@@ -4,11 +4,14 @@
 //  - REPLAY: combat already resolved by the core; the overlay replays the
 //    recorded events (used for AI-vs-AI simulation).
 //  - INTERACTIVE: Legend of Dragoon style additions. The battle resolves
-//    strike by strike DURING the vignette: before each blow lands, the
-//    player times button presses (Space / click) against a shrinking ring.
-//    Offense QTEs scale damage dealt 0.75x-1.5x; the defensive brace cuts
-//    incoming damage to 50/75/100%. Ring color = combat type:
-//    blue physical, green magic, red defense.
+//    strike by strike DURING the vignette:
+//      * Offense (your strikes): time taps (Space / click) against a
+//        shrinking ring — one per step of your class's rhythm. Scales
+//        damage dealt 0.75x-1.5x.
+//      * Defense (incoming strikes): HOLD in anticipation while the enemy
+//        charges you, then RELEASE as the blow lands. Parried! 50% /
+//        Blocked 75% / held-through Guarded 90% / dropped guard 100%.
+//    Ring color = combat type: blue physical, green magic, red defense.
 // ---------------------------------------------------------------
 
 const VIGNETTE = {
@@ -42,11 +45,16 @@ function offenseResult(points) {
   return { mult, label };
 }
 
-// Defense: one well-timed brace halves the incoming hit.
-function defenseResult(points) {
-  if (points >= 1) return { mult: 0.5, label: "Blocked!" };
-  if (points > 0) return { mult: 0.75, label: "Braced" };
-  return { mult: 1.0, label: null };
+// Defense: grade the hold-and-release parry. `q` carries the hold state
+// machine: waiting (never pressed) | holding | released (+releaseErr).
+function defenseResult(q) {
+  if (q.state === "released") {
+    if (q.releaseErr <= q.spec.perfect) return { mult: 0.5, label: "Parried!" };
+    if (q.releaseErr <= q.spec.good) return { mult: 0.75, label: "Blocked" };
+    return { mult: 1.0, label: "Exposed" };  // dropped the guard too early
+  }
+  if (q.state === "holding") return { mult: 0.9, label: "Guarded" }; // static guard
+  return { mult: 1.0, label: "Exposed" };    // never raised the guard
 }
 
 class BattleVignette {
@@ -57,14 +65,25 @@ class BattleVignette {
     canvas.height = VIGNETTE.H;
     this.playing = false;
     this.interactive = false;
-    canvas.addEventListener("click", () => {
-      if (this.interactive) this.press();
+    // Offense taps trigger on press-down; defense parries need the release
+    // too, so both edges of key and mouse are wired.
+    canvas.addEventListener("mousedown", () => {
+      if (this.interactive) this.holdStart();
       else this.skip();
+    });
+    canvas.addEventListener("mouseup", () => {
+      if (this.interactive) this.holdEnd();
     });
     window.addEventListener("keydown", e => {
       if (e.code === "Space" && this.playing && this.interactive) {
         e.preventDefault();
-        this.press();
+        if (!e.repeat) this.holdStart();
+      }
+    });
+    window.addEventListener("keyup", e => {
+      if (e.code === "Space" && this.playing && this.interactive) {
+        e.preventDefault();
+        this.holdEnd();
       }
     });
     this.tick = this.tick.bind(this);
@@ -236,24 +255,37 @@ class BattleVignette {
       this.outroDur = killed ? VIGNETTE.OUTRO_KILL : VIGNETTE.OUTRO;
       this.outroBeat = { deathShown: false, dur: this.outroDur };
       this.phase = "outro";
-    } else {
+    } else if (this.strikes[this.strikeIdx].actor.team === "player") {
       this.phase = "approach";
+    } else {
+      // Incoming strike: no separate approach — the enemy's charge happens
+      // DURING the QTE and is itself the release cue for the parry.
+      this.startQTE(this.strikes[this.strikeIdx]);
     }
   }
 
   startQTE(strike) {
     const offense = strike.actor.team === "player";
-    const spec = offense ? strike.actor.cls.qte : DEFENSE_QTE;
-    this.qte = {
-      spec,
-      kind: offense ? "offense" : "defense",
-      color: !offense ? QTE_COLORS.defense
-        : (strike.actor.cls.magic ? QTE_COLORS.magic : QTE_COLORS.physical),
-      step: 0,
-      stepT: -VIGNETTE.QTE_LEAD_IN,  // negative time = wind-up, ring not moving
-      stepDone: false,
-      points: [],
-    };
+    if (offense) {
+      this.qte = {
+        spec: strike.actor.cls.qte,
+        kind: "offense",
+        color: strike.actor.cls.magic ? QTE_COLORS.magic : QTE_COLORS.physical,
+        step: 0,
+        stepT: -VIGNETTE.QTE_LEAD_IN,  // negative time = wind-up, ring not moving
+        stepDone: false,
+        points: [],
+      };
+    } else {
+      this.qte = {
+        spec: DEFENSE_QTE,
+        kind: "defense",
+        color: QTE_COLORS.defense,
+        stepT: 0,
+        state: "waiting",   // waiting -> holding -> released
+        releaseErr: null,
+      };
+    }
     this.phase = "qte";
     this.phaseT = 0;
   }
@@ -261,6 +293,10 @@ class BattleVignette {
   updateQTE(dt) {
     const q = this.qte;
     q.stepT += dt;
+    if (q.kind === "defense") {
+      this.updateDefenseQTE(q);
+      return;
+    }
     const period = q.spec.periods[q.step];
     if (!q.stepDone && q.stepT > period + q.spec.good) {
       this.recordPress({ points: 0, text: "Miss", color: "#8a90a0" });
@@ -273,12 +309,44 @@ class BattleVignette {
     }
   }
 
-  press() {
+  updateDefenseQTE(q) {
+    const impact = q.spec.windup + q.spec.travel;
+    // the enemy's lunge IS the timing cue: it tracks the gauge exactly
+    const strike = this.strikes[this.strikeIdx];
+    const k = Math.min(1, Math.max(0, (q.stepT - q.spec.windup) / q.spec.travel));
+    this.fighterOf(strike.actor).lunge = k;
+
+    if (q.state === "released") {
+      // blow still lands at the impact moment even if the guard dropped early
+      if (q.stepT >= Math.max(impact, q.releaseT)) this.resolveQTEStrike();
+    } else if (q.stepT >= impact + q.spec.good) {
+      this.resolveQTEStrike();  // held through, or never raised the guard
+    }
+  }
+
+  // Press-down: offense grades the tap immediately; defense raises the guard.
+  holdStart() {
     if (!this.playing || !this.interactive || this.phase !== "qte") return;
     const q = this.qte;
-    if (q.stepT < 0 || q.stepDone) return;  // ignore presses in the wind-up
-    const period = q.spec.periods[q.step];
-    this.recordPress(gradePress(Math.abs(q.stepT - period), q.spec));
+    if (q.kind === "offense") {
+      if (q.stepT < 0 || q.stepDone) return;  // ignore presses in the wind-up
+      const period = q.spec.periods[q.step];
+      this.recordPress(gradePress(Math.abs(q.stepT - period), q.spec));
+    } else if (q.state === "waiting") {
+      q.state = "holding";
+      q.pressT = q.stepT;
+    }
+  }
+
+  // Release: only meaningful for the defensive parry.
+  holdEnd() {
+    if (!this.playing || !this.interactive || this.phase !== "qte") return;
+    const q = this.qte;
+    if (q.kind === "defense" && q.state === "holding") {
+      q.state = "released";
+      q.releaseT = q.stepT;
+      q.releaseErr = Math.abs(q.stepT - (q.spec.windup + q.spec.travel));
+    }
   }
 
   recordPress(grade) {
@@ -298,7 +366,7 @@ class BattleVignette {
       offMult = r.mult;
       label = r.label;
     } else {
-      const r = defenseResult(q.points[0]);
+      const r = defenseResult(q);
       defMult = r.mult;
       label = r.label;
     }
@@ -433,14 +501,18 @@ class BattleVignette {
   }
 
   drawQTE() {
+    // slight extra dim so the prompts read clearly
+    this.ctx.fillStyle = "rgba(10,12,16,0.35)";
+    this.ctx.fillRect(10, 10, VIGNETTE.W - 20, 190);
+    if (this.qte.kind === "defense") this.drawDefenseQTE();
+    else this.drawOffenseQTE();
+  }
+
+  drawOffenseQTE() {
     const ctx = this.ctx;
     const q = this.qte;
     const { RING_X, RING_Y, RING_START, RING_END } = VIGNETTE;
     const period = q.spec.periods[q.step];
-
-    // slight extra dim so the rings read clearly
-    ctx.fillStyle = "rgba(10,12,16,0.35)";
-    ctx.fillRect(10, 10, VIGNETTE.W - 20, 190);
 
     // step dots: one per press in this class's addition
     const n = q.spec.periods.length;
@@ -474,8 +546,63 @@ class BattleVignette {
     ctx.fillStyle = "rgba(255,255,255,0.55)";
     ctx.font = "11px 'Segoe UI', sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(q.kind === "defense" ? "BRACE — SPACE / CLICK" : "SPACE / CLICK",
-      RING_X, RING_Y + 48);
+    ctx.fillText("SPACE / CLICK", RING_X, RING_Y + 48);
+  }
+
+  drawDefenseQTE() {
+    const ctx = this.ctx;
+    const q = this.qte;
+    const impact = q.spec.windup + q.spec.travel;
+    const total = impact + q.spec.good;   // gauge spans up to the last legal release
+    const xa = 160, xb = 400, y = 100;
+    const toX = t => xa + (xb - xa) * Math.min(1, t / total);
+
+    // track
+    ctx.strokeStyle = "rgba(255,255,255,0.3)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(xa, y);
+    ctx.lineTo(xb, y);
+    ctx.stroke();
+    // good / perfect release zones around the impact notch
+    ctx.fillStyle = "rgba(224,72,72,0.30)";
+    ctx.fillRect(toX(impact - q.spec.good), y - 8, toX(impact + q.spec.good) - toX(impact - q.spec.good), 16);
+    ctx.fillStyle = "rgba(224,72,72,0.65)";
+    ctx.fillRect(toX(impact - q.spec.perfect), y - 8, toX(impact + q.spec.perfect) - toX(impact - q.spec.perfect), 16);
+    // impact notch
+    ctx.strokeStyle = q.color;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(toX(impact), y - 14);
+    ctx.lineTo(toX(impact), y + 14);
+    ctx.stroke();
+    // the incoming blow
+    const holding = q.state === "holding";
+    ctx.strokeStyle = holding ? "#ffffff" : "rgba(255,255,255,0.6)";
+    ctx.lineWidth = holding ? 4 : 3;
+    ctx.beginPath();
+    ctx.moveTo(toX(q.stepT), y - 11);
+    ctx.lineTo(toX(q.stepT), y + 11);
+    ctx.stroke();
+
+    // shield arc on the defender while the guard is up
+    const defender = this.fighterOf(this.strikes[this.strikeIdx].target);
+    const dx = this.fighterX(defender);
+    ctx.strokeStyle = q.color;
+    ctx.lineWidth = holding ? 5 : 2;
+    ctx.globalAlpha = this.panelAlpha * (holding ? 0.95 : q.state === "waiting" ? 0.3 : 0.15);
+    ctx.beginPath();
+    ctx.arc(dx, 175, 44, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = this.panelAlpha;
+
+    ctx.fillStyle = "rgba(255,255,255,0.55)";
+    ctx.font = "11px 'Segoe UI', sans-serif";
+    ctx.textAlign = "center";
+    const hint = q.state === "waiting" ? "HOLD SPACE / MOUSE TO GUARD"
+      : q.state === "holding" ? "RELEASE AS THE BLOW LANDS!"
+      : "";
+    if (hint) ctx.fillText(hint, (xa + xb) / 2, y + 34);
   }
 
   drawFighter(f) {

@@ -316,16 +316,27 @@ entirely — both mirrored in the web version.
 
 ### Quick Time Events (Legend of Dragoon style additions)
 
-Battles involving the player are interactive: before each blow, a ring
-shrinks onto a target and the player presses Space (or clicks) at the
-moment they align — one press per step of the attacking class's unique
-rhythm (`qte` in `game_data.gd`: the Knight is one slow heavy beat, the
-Mercenary a three-press chain, the Pegasus three rapid taps…). Press
-quality (Perfect / Good / Miss) averages into a damage multiplier of
-0.75×–1.5×; chaining every press perfectly earns **MAX!**. When an *enemy*
-strike is incoming, the player instead gets a one-press **brace** that
-cuts the damage to 50/75/100%. Ring colors encode the combat type:
-**blue** physical, **green** magic, **red** defense.
+Battles involving the player are interactive, with two distinct input
+feels:
+
+- **Attacking (tap timing):** before each of your blows, a ring shrinks
+  onto a target and you tap Space (or click) at the moment they align —
+  one tap per step of the attacking class's unique rhythm (`qte` in
+  `game_data.gd`: the Knight is one slow heavy beat, the Mercenary a
+  three-press chain, the Pegasus three rapid taps…). Tap quality
+  (Perfect / Good / Miss) averages into a damage multiplier of 0.75×–1.5×;
+  chaining every press perfectly earns **MAX!**.
+- **Defending (hold-and-release parry):** when an enemy strike is
+  incoming there is no separate approach animation — the enemy's charge
+  happens *during* the QTE and is itself the timing cue. You **press and
+  hold** to raise your guard while they close in, then **release as the
+  blow lands**: a perfect release **parries (50% damage)**, a good one
+  blocks (75%), holding through the hit still guards (90%), and dropping
+  your guard early — or never raising it — leaves you exposed (100%).
+  Once released, the guard cannot be re-raised for that strike.
+
+Ring/gauge colors encode the combat type: **blue** physical, **green**
+magic, **red** defense.
 
 Engine notes on the implementation (`battle_vignette.gd`):
 
@@ -338,8 +349,12 @@ Engine notes on the implementation (`battle_vignette.gd`):
   at any frame rate.
 - **Keyboard input arrives via `_unhandled_key_input`** — the keyboard
   sibling of `_unhandled_input` from Step 5 — while mouse presses reuse
-  the overlay's `_gui_input`. Both funnel into one `_press()` that grades
-  the timing error.
+  the overlay's `_gui_input`. The parry made both handlers edge-aware:
+  `event.pressed` (minus `event.echo` key repeats) routes to
+  `_hold_start()`, the release edge to `_hold_end()`. Taps and holds are
+  the same two edges — a "tap" is just a press whose release nobody
+  listens to, which is why offense needed no changes when defense
+  started caring about release timing.
 - **The core/presentation boundary held.** `combat.gd` gained
   `plan_strikes()` and `resolve_strike(actor, target, rng, off_mult,
   def_mult)`; it knows nothing about rings or input. The grading math

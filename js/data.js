@@ -39,11 +39,14 @@ const TERRAIN_CHARS = {
 };
 
 // Quick Time Events (Legend of Dragoon style "additions").
-// Each class has a unique attack pattern: `periods` is the seconds between
-// successive press targets (one entry per press); `perfect`/`good` are the
-// timing tolerances in seconds. Defense is one universal well-timed brace.
+// Offense: each class has a unique attack pattern — `periods` is the seconds
+// between successive press targets (one entry per press); `perfect`/`good`
+// are the timing tolerances in seconds.
+// Defense is a HOLD-AND-RELEASE parry: press and hold while the attacker
+// winds up (`windup`) and charges in (`travel`), then release as the blow
+// lands. Tolerances grade the release against the impact moment.
 // Ring colors follow combat type: blue physical, green magic, red defense.
-const DEFENSE_QTE = { periods: [0.7], perfect: 0.06, good: 0.14 };
+const DEFENSE_QTE = { windup: 0.5, travel: 0.9, perfect: 0.07, good: 0.16 };
 const QTE_COLORS = { physical: "#4a90d9", magic: "#3ecf6e", defense: "#e04848" };
 
 // Unit classes. range = attack distances (manhattan). mt/hit/crit describe

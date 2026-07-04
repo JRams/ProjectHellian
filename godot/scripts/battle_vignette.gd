@@ -4,11 +4,14 @@
 #  - REPLAY: combat already resolved by the core; the overlay replays the
 #    recorded events (used for AI-vs-AI simulation).
 #  - INTERACTIVE: Legend of Dragoon style additions. The battle resolves
-#    strike by strike DURING the vignette: before each blow lands, the
-#    player times presses (Space / click) against a shrinking ring.
-#    Offense QTEs scale damage dealt 0.75x-1.5x; the defensive brace cuts
-#    incoming damage to 50/75/100%. Ring color = combat type:
-#    blue physical, green magic, red defense.
+#    strike by strike DURING the vignette:
+#      * Offense (your strikes): time taps (Space / click) against a
+#        shrinking ring — one per step of your class's rhythm. Scales
+#        damage dealt 0.75x-1.5x.
+#      * Defense (incoming strikes): HOLD in anticipation while the enemy
+#        charges you, then RELEASE as the blow lands. Parried! 50% /
+#        Blocked 75% / held-through Guarded 90% / dropped guard 100%.
+#    Ring color = combat type: blue physical, green magic, red defense.
 #
 # Godot concepts on display:
 #  - A full-screen Control with mouse_filter STOP shields everything under
@@ -93,13 +96,18 @@ static func offense_result(points: Array) -> Dictionary:
 	return {"mult": 0.75 + 0.75 * avg, "label": label}
 
 
-# Defense: one well-timed brace halves the incoming hit.
-static func defense_result(points: float) -> Dictionary:
-	if points >= 1.0:
-		return {"mult": 0.5, "label": "Blocked!"}
-	if points > 0.0:
-		return {"mult": 0.75, "label": "Braced"}
-	return {"mult": 1.0, "label": ""}
+# Defense: grade the hold-and-release parry. `q` carries the hold state
+# machine: waiting (never pressed) | holding | released (+release_err).
+static func defense_result(q: Dictionary) -> Dictionary:
+	if q["state"] == "released":
+		if q["release_err"] <= q["spec"]["perfect"]:
+			return {"mult": 0.5, "label": "Parried!"}
+		if q["release_err"] <= q["spec"]["good"]:
+			return {"mult": 0.75, "label": "Blocked"}
+		return {"mult": 1.0, "label": "Exposed"}  # dropped the guard too early
+	if q["state"] == "holding":
+		return {"mult": 0.9, "label": "Guarded"}  # static guard
+	return {"mult": 1.0, "label": "Exposed"}      # never raised the guard
 
 
 # --- setup ---------------------------------------------------------------------
@@ -201,28 +209,50 @@ func _finish(commit := true) -> void:
 # --- input ------------------------------------------------------------------------
 
 
+# Offense taps trigger on press-down; defense parries need the release
+# too, so both edges of key and mouse are handled.
 func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed \
-			and event.button_index == MOUSE_BUTTON_LEFT:
-		if interactive:
-			_press()
-		else:
-			skip()
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			if interactive:
+				_hold_start()
+			else:
+				skip()
+		elif interactive:
+			_hold_end()
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
-	if playing and interactive and event is InputEventKey and event.pressed \
-			and not event.echo and event.keycode == KEY_SPACE:
-		_press()
+	if playing and interactive and event is InputEventKey \
+			and event.keycode == KEY_SPACE:
+		if event.pressed and not event.echo:
+			_hold_start()
+		elif not event.pressed:
+			_hold_end()
 
 
-func _press() -> void:
+# Press-down: offense grades the tap immediately; defense raises the guard.
+func _hold_start() -> void:
 	if not playing or not interactive or phase != Phase.QTE:
 		return
-	if qte["step_t"] < 0.0 or qte["step_done"]:
-		return  # ignore presses in the wind-up
-	var period: float = qte["spec"]["periods"][qte["step"]]
-	_record_press(grade_press(absf(qte["step_t"] - period), qte["spec"]))
+	if qte["kind"] == "offense":
+		if qte["step_t"] < 0.0 or qte["step_done"]:
+			return  # ignore presses in the wind-up
+		var period: float = qte["spec"]["periods"][qte["step"]]
+		_record_press(grade_press(absf(qte["step_t"] - period), qte["spec"]))
+	elif qte["state"] == "waiting":
+		qte["state"] = "holding"
+
+
+# Release: only meaningful for the defensive parry.
+func _hold_end() -> void:
+	if not playing or not interactive or phase != Phase.QTE:
+		return
+	if qte["kind"] == "defense" and qte["state"] == "holding":
+		qte["state"] = "released"
+		qte["release_t"] = qte["step_t"]
+		qte["release_err"] = absf(qte["step_t"]
+				- (qte["spec"]["windup"] + qte["spec"]["travel"]))
 
 
 # --- frame driver -------------------------------------------------------------------
@@ -321,36 +351,47 @@ func _next_strike() -> void:
 		outro_dur = OUTRO_KILL if killed else OUTRO
 		outro_beat = {"death_shown": false}
 		phase = Phase.OUTRO
-	else:
+	elif strikes[strike_idx]["actor"].team == Unit.Team.PLAYER:
 		phase = Phase.APPROACH
+	else:
+		# Incoming strike: no separate approach — the enemy's charge happens
+		# DURING the QTE and is itself the release cue for the parry.
+		_start_qte()
 
 
 func _start_qte() -> void:
 	var strike: Dictionary = strikes[strike_idx]
 	var actor: Unit = strike["actor"]
-	var offense: bool = actor.team == Unit.Team.PLAYER
-	var color: Color
-	if not offense:
-		color = GameData.qte_colors["defense"]
-	elif actor.u_class.is_magic:
-		color = GameData.qte_colors["magic"]
+	if actor.team == Unit.Team.PLAYER:
+		qte = {
+			"spec": actor.u_class.qte,
+			"kind": "offense",
+			"color": GameData.qte_colors["magic"] if actor.u_class.is_magic \
+					else GameData.qte_colors["physical"],
+			"step": 0,
+			"step_t": -QTE_LEAD_IN,  # negative time = wind-up, ring not moving
+			"step_done": false,
+			"points": [],
+		}
 	else:
-		color = GameData.qte_colors["physical"]
-	qte = {
-		"spec": actor.u_class.qte if offense else GameData.DEFENSE_QTE,
-		"kind": "offense" if offense else "defense",
-		"color": color,
-		"step": 0,
-		"step_t": -QTE_LEAD_IN,  # negative time = wind-up, ring not moving
-		"step_done": false,
-		"points": [],
-	}
+		qte = {
+			"spec": GameData.DEFENSE_QTE,
+			"kind": "defense",
+			"color": GameData.qte_colors["defense"],
+			"step_t": 0.0,
+			"state": "waiting",   # waiting -> holding -> released
+			"release_t": 0.0,
+			"release_err": 0.0,
+		}
 	phase = Phase.QTE
 	phase_t = 0.0
 
 
 func _update_qte(dt: float) -> void:
 	qte["step_t"] += dt
+	if qte["kind"] == "defense":
+		_update_defense_qte()
+		return
 	var period: float = qte["spec"]["periods"][qte["step"]]
 	if not qte["step_done"] and qte["step_t"] > period + qte["spec"]["good"]:
 		_record_press({"points": 0.0, "text": "Miss", "color": Color("8a90a0")})
@@ -361,6 +402,21 @@ func _update_qte(dt: float) -> void:
 			_resolve_qte_strike()
 		else:
 			qte["step_t"] = -QTE_GAP
+
+
+func _update_defense_qte() -> void:
+	var impact: float = qte["spec"]["windup"] + qte["spec"]["travel"]
+	# the enemy's lunge IS the timing cue: it tracks the gauge exactly
+	var k: float = clampf((qte["step_t"] - qte["spec"]["windup"])
+			/ qte["spec"]["travel"], 0.0, 1.0)
+	_actor_fighter()["lunge"] = k
+
+	if qte["state"] == "released":
+		# blow still lands at the impact moment even if the guard dropped early
+		if qte["step_t"] >= maxf(impact, qte["release_t"]):
+			_resolve_qte_strike()
+	elif qte["step_t"] >= impact + qte["spec"]["good"]:
+		_resolve_qte_strike()  # held through, or never raised the guard
 
 
 func _record_press(grade: Dictionary) -> void:
@@ -379,7 +435,7 @@ func _resolve_qte_strike() -> void:
 		off_mult = r["mult"]
 		label = r["label"]
 	else:
-		var r := defense_result(qte["points"][0])
+		var r := defense_result(qte)
 		def_mult = r["mult"]
 		label = r["label"]
 	var ev: Dictionary = game_ref.strike(strike["actor"], strike["target"],
@@ -511,12 +567,18 @@ func _draw() -> void:
 
 
 func _draw_qte(font: Font) -> void:
+	# slight extra dim so the prompts read clearly
+	draw_rect(Rect2(10, 10, W - 20, 190), Color(0.04, 0.05, 0.06, 0.35 * panel_alpha))
+	if qte["kind"] == "defense":
+		_draw_defense_qte(font)
+	else:
+		_draw_offense_qte(font)
+
+
+func _draw_offense_qte(font: Font) -> void:
 	var color: Color = qte["color"]
 	color.a = panel_alpha
 	var period: float = qte["spec"]["periods"][qte["step"]]
-
-	# slight extra dim so the rings read clearly
-	draw_rect(Rect2(10, 10, W - 20, 190), Color(0.04, 0.05, 0.06, 0.35 * panel_alpha))
 
 	# step dots: one per press in this class's addition
 	var n: int = qte["spec"]["periods"].size()
@@ -534,9 +596,59 @@ func _draw_qte(font: Font) -> void:
 		var r := RING_START - (RING_START - RING_END) * k
 		draw_arc(RING_POS, r, 0, TAU, 48, color, 4.0)
 
-	var hint := "BRACE — SPACE / CLICK" if qte["kind"] == "defense" else "SPACE / CLICK"
-	draw_string(font, RING_POS + Vector2(-120, 48), hint,
+	draw_string(font, RING_POS + Vector2(-120, 48), "SPACE / CLICK",
 			HORIZONTAL_ALIGNMENT_CENTER, 240, 11, Color(1, 1, 1, 0.55 * panel_alpha))
+
+
+func _draw_defense_qte(font: Font) -> void:
+	var color: Color = qte["color"]
+	color.a = panel_alpha
+	var impact: float = qte["spec"]["windup"] + qte["spec"]["travel"]
+	var total: float = impact + qte["spec"]["good"]  # gauge ends at last legal release
+	var xa := 160.0
+	var xb := 400.0
+	var y := 100.0
+	var to_x := func(t: float) -> float:
+		return xa + (xb - xa) * minf(1.0, t / total)
+
+	# track
+	draw_line(Vector2(xa, y), Vector2(xb, y), Color(1, 1, 1, 0.3 * panel_alpha), 3.0)
+	# good / perfect release zones around the impact notch
+	var gx1: float = to_x.call(impact - qte["spec"]["good"])
+	var gx2: float = to_x.call(impact + qte["spec"]["good"])
+	draw_rect(Rect2(gx1, y - 8, gx2 - gx1, 16), Color(0.88, 0.28, 0.28, 0.30 * panel_alpha))
+	var px1: float = to_x.call(impact - qte["spec"]["perfect"])
+	var px2: float = to_x.call(impact + qte["spec"]["perfect"])
+	draw_rect(Rect2(px1, y - 8, px2 - px1, 16), Color(0.88, 0.28, 0.28, 0.65 * panel_alpha))
+	# impact notch
+	var nx: float = to_x.call(impact)
+	draw_line(Vector2(nx, y - 14), Vector2(nx, y + 14), color, 3.0)
+	# the incoming blow
+	var holding: bool = qte["state"] == "holding"
+	var mx: float = to_x.call(qte["step_t"])
+	var marker := Color(1, 1, 1, panel_alpha if holding else 0.6 * panel_alpha)
+	draw_line(Vector2(mx, y - 11), Vector2(mx, y + 11), marker, 4.0 if holding else 3.0)
+
+	# shield arc on the defender while the guard is up
+	var defender := _fighter_of(strikes[strike_idx]["target"])
+	var dx := _fighter_x(defender)
+	var shield := color
+	if holding:
+		shield.a = panel_alpha * 0.95
+	elif qte["state"] == "waiting":
+		shield.a = panel_alpha * 0.3
+	else:
+		shield.a = panel_alpha * 0.15
+	draw_arc(Vector2(dx, 175.0), 44.0, 0, TAU, 48, shield, 5.0 if holding else 2.0)
+
+	var hint := ""
+	if qte["state"] == "waiting":
+		hint = "HOLD SPACE / MOUSE TO GUARD"
+	elif holding:
+		hint = "RELEASE AS THE BLOW LANDS!"
+	if hint != "":
+		draw_string(font, Vector2((xa + xb) / 2.0 - 140, y + 34), hint,
+				HORIZONTAL_ALIGNMENT_CENTER, 280, 11, Color(1, 1, 1, 0.55 * panel_alpha))
 
 
 func _draw_ellipse(center: Vector2, radii: Vector2, color: Color) -> void:

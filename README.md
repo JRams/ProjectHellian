@@ -46,11 +46,14 @@ then Import → `godot/project.godot` → F5. Headless battle-simulation test:
   flash, misses dodge, deaths fade. Turn animations off entirely with the
   "Battle anims" toggle.
 - **Quick Time Events** — Legend of Dragoon style additions in every
-  battle the player fights: time Space/click presses against a shrinking
-  ring, one per step of your class's unique attack rhythm. Perfect chains
-  deal **MAX! (1.5×)** damage; a well-timed brace halves an incoming hit.
-  Ring colors code the combat type: blue physical, green magic,
-  red defense. AI-vs-AI simulation stays fully automatic.
+  battle the player fights. Attacking: tap Space/click against a shrinking
+  ring, one tap per step of your class's unique rhythm — perfect chains
+  deal **MAX! (1.5×)** damage. Defending: **hold to guard** while the
+  enemy charges you, then **release as the blow lands** — a perfect
+  release parries for 50% damage, holding through still guards (90%),
+  dropping your guard early leaves you exposed. Colors code the combat
+  type: blue physical, green magic, red defense. AI-vs-AI simulation
+  stays fully automatic.
 - **Playable + auto-simulation** — control the blue army yourself against
   the enemy AI, or press **Simulate Battle** and watch the AI play both
   sides to a conclusion. The AI scores every reachable (tile, target) pair,

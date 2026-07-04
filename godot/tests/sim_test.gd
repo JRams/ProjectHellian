@@ -69,9 +69,18 @@ func _test_qte(game: Game) -> int:
 			or not is_equal_approx(BattleVignette.offense_result([0.0])["mult"], 0.75):
 		print("FAILED: offense multipliers wrong")
 		failures += 1
-	if BattleVignette.defense_result(1.0)["mult"] != 0.5 \
-			or BattleVignette.defense_result(0.0)["mult"] != 1.0:
-		print("FAILED: defense multipliers wrong")
+	var dspec: Dictionary = GameData.DEFENSE_QTE
+	var parry := {"state": "released", "release_err": 0.02, "spec": dspec}
+	var block := {"state": "released", "release_err": 0.12, "spec": dspec}
+	var early := {"state": "released", "release_err": 0.5, "spec": dspec}
+	var held := {"state": "holding", "spec": dspec}
+	var none := {"state": "waiting", "spec": dspec}
+	if BattleVignette.defense_result(parry)["mult"] != 0.5 \
+			or BattleVignette.defense_result(block)["mult"] != 0.75 \
+			or BattleVignette.defense_result(early)["mult"] != 1.0 \
+			or BattleVignette.defense_result(held)["mult"] != 0.9 \
+			or BattleVignette.defense_result(none)["mult"] != 1.0:
+		print("FAILED: parry multipliers wrong")
 		failures += 1
 
 	# Strike order: merc (spd 11) vs knight (spd 3) at range 1 = merc doubles.
