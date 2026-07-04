@@ -1,0 +1,108 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/board.gd" id="2_board"]
+[ext_resource type="Script" path="res://scripts/ui.gd" id="3_ui"]
+[ext_resource type="Script" path="res://scripts/battle_vignette.gd" id="4_battle"]
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_main")
+
+[node name="Board" type="Node2D" parent="."]
+position = Vector2(16, 72)
+script = ExtResource("2_board")
+
+[node name="Units" type="Node2D" parent="."]
+position = Vector2(16, 72)
+
+[node name="SimTimer" type="Timer" parent="."]
+one_shot = true
+
+[node name="UI" type="CanvasLayer" parent="."]
+script = ExtResource("3_ui")
+
+[node name="Banner" type="Label" parent="UI"]
+offset_left = 16.0
+offset_top = 24.0
+offset_right = 720.0
+offset_bottom = 60.0
+theme_override_font_sizes/font_size = 20
+text = "Turn 1 — Player Phase"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Sidebar" type="VBoxContainer" parent="UI"]
+offset_left = 740.0
+offset_top = 24.0
+offset_right = 1088.0
+offset_bottom = 608.0
+theme_override_constants/separation = 10
+
+[node name="Controls" type="HBoxContainer" parent="UI/Sidebar"]
+theme_override_constants/separation = 8
+
+[node name="SimulateBtn" type="Button" parent="UI/Sidebar/Controls"]
+text = "▶ Simulate"
+
+[node name="EndTurnBtn" type="Button" parent="UI/Sidebar/Controls"]
+text = "End Turn"
+
+[node name="ResetBtn" type="Button" parent="UI/Sidebar/Controls"]
+text = "↺ Reset"
+
+[node name="SpeedRow" type="HBoxContainer" parent="UI/Sidebar"]
+theme_override_constants/separation = 8
+
+[node name="SpeedLabel" type="Label" parent="UI/Sidebar/SpeedRow"]
+text = "Speed"
+
+[node name="Speed" type="OptionButton" parent="UI/Sidebar/SpeedRow"]
+
+[node name="AnimsCheck" type="CheckButton" parent="UI/Sidebar/SpeedRow"]
+button_pressed = true
+text = "Battle anims"
+
+[node name="Counts" type="Label" parent="UI/Sidebar"]
+text = "Player 7 · Enemy 7"
+
+[node name="InfoPanel" type="PanelContainer" parent="UI/Sidebar"]
+
+[node name="Info" type="RichTextLabel" parent="UI/Sidebar/InfoPanel"]
+custom_minimum_size = Vector2(0, 170)
+bbcode_enabled = true
+fit_content = true
+
+[node name="LogPanel" type="PanelContainer" parent="UI/Sidebar"]
+
+[node name="Log" type="RichTextLabel" parent="UI/Sidebar/LogPanel"]
+custom_minimum_size = Vector2(0, 230)
+bbcode_enabled = true
+scroll_following = true
+
+[node name="Help" type="RichTextLabel" parent="UI/Sidebar"]
+bbcode_enabled = true
+fit_content = true
+text = "[b]How to play[/b]
+[color=#9aa0ae]Click a [b]blue unit[/b] — blue tiles show its movement range (cardinal steps only). Click a tile to move. Enemies in range glow [b]red[/b]; click one to attack (hover for the forecast). Click anywhere else to wait.
+[b]Attacking:[/b] tap [b]Space[/b] (or click) when the shrinking ring meets the target. Each class has its own rhythm — chain every press perfectly for [b]MAX! damage (1.5×)[/b]. [color=#4a90d9]Blue[/color] = physical, [color=#3ecf6e]green[/color] = magic.
+[color=#e04848][b]Defending:[/b][/color] when an enemy charges you, [b]press and hold[/b] to raise your guard, then [b]release as the blow lands[/b] — a perfect release [b]parries (50% damage)[/b]; holding through still guards (90%); dropping your guard early leaves you exposed.
+[b]Simulate[/b] lets the AI play both armies (no QTEs).[/color]"
+
+[node name="Forecast" type="PanelContainer" parent="UI"]
+visible = false
+offset_left = 24.0
+offset_top = 80.0
+offset_right = 288.0
+offset_bottom = 160.0
+
+[node name="ForecastText" type="RichTextLabel" parent="UI/Forecast"]
+custom_minimum_size = Vector2(250, 0)
+bbcode_enabled = true
+fit_content = true
+
+[node name="BattleFX" type="Control" parent="UI"]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("4_battle")
