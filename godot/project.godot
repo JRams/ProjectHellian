@@ -20,6 +20,13 @@ config/icon="res://icon.svg"
 
 window/size/viewport_width=1104
 window/size/viewport_height=624
+window/handheld/orientation=4
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
 
 [rendering]
 

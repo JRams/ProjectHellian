@@ -5,12 +5,14 @@
 #    recorded events (used for AI-vs-AI simulation).
 #  - INTERACTIVE: Legend of Dragoon style additions. The battle resolves
 #    strike by strike DURING the vignette:
-#      * Offense (your strikes): time taps (Space / click) against a
-#        shrinking ring — one per step of your class's rhythm. Scales
-#        damage dealt 0.75x-1.5x.
-#      * Defense (incoming strikes): HOLD in anticipation while the enemy
-#        charges you, then RELEASE as the blow lands. Parried! 50% /
-#        Blocked 75% / held-through Guarded 90% / dropped guard 100%.
+#      * Offense (your strikes): SWIPE in the direction shown, timed
+#        against the shrinking ring — one swipe per step of your class's
+#        rhythm. Scales damage dealt 0.75x-1.5x. (Mobile prototype: on
+#        the main branch this is a timed tap instead.)
+#      * Defense (incoming strikes): HOLD (finger down) in anticipation
+#        while the enemy charges you, then RELEASE as the blow lands.
+#        Parried! 50% / Blocked 75% / held-through Guarded 90% /
+#        dropped guard 100%.
 #    Ring color = combat type: blue physical, green magic, red defense.
 #
 # Godot concepts on display:
@@ -41,6 +43,12 @@ const QTE_GAP := 0.3       # pause between presses of a multi-step addition
 const RING_POS := Vector2(280, 105)
 const RING_START := 74.0
 const RING_END := 26.0
+# A swipe = touch travels this many pixels; graded the moment it's crossed.
+const SWIPE_MIN_DIST := 60.0
+const SWIPE_DIRS := {
+	"up": Vector2.UP, "down": Vector2.DOWN,
+	"left": Vector2.LEFT, "right": Vector2.RIGHT,
+}
 
 var playing := false
 var interactive := false
@@ -67,6 +75,11 @@ var phase_t := 0.0
 var outro_dur := OUTRO
 var outro_beat := {}
 var finish_called := false
+
+# swipe tracking (one finger; index 0 with mouse emulation)
+var touch_start := Vector2.ZERO
+var touch_active := false
+var swipe_consumed := false
 
 
 # --- QTE grading (static so the headless test can exercise it) ----------------
@@ -209,38 +222,83 @@ func _finish(commit := true) -> void:
 # --- input ------------------------------------------------------------------------
 
 
-# Offense taps trigger on press-down; defense parries need the release
-# too, so both edges of key and mouse are handled.
+# MOBILE PROTOTYPE: input arrives as touch events. On a phone these come
+# from the screen; on desktop, emulate_touch_from_mouse (project.godot)
+# synthesizes them from mouse drags, so the swipes are testable anywhere.
+#  - Offense: swipe in the step's direction; graded when the finger has
+#    travelled SWIPE_MIN_DIST, so timing is judged at the flick itself.
+#  - Defense: finger down = guard up, finger up = release (unchanged).
+#  - Replay mode: any tap skips.
 func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+	if event is InputEventScreenTouch:
 		if event.pressed:
-			if interactive:
-				_hold_start()
-			else:
+			if not interactive:
 				skip()
-		elif interactive:
-			_hold_end()
+				return
+			touch_active = true
+			swipe_consumed = false
+			touch_start = event.position
+			_hold_start()
+		else:
+			touch_active = false
+			if interactive:
+				if not swipe_consumed:
+					_try_swipe(event.position - touch_start)
+				_hold_end()
+	elif event is InputEventScreenDrag and interactive and touch_active \
+			and not swipe_consumed:
+		_try_swipe(event.position - touch_start)
 
 
+# Desktop fallbacks: arrow keys are instant swipes, Space drives the parry.
 func _unhandled_key_input(event: InputEvent) -> void:
-	if playing and interactive and event is InputEventKey \
-			and event.keycode == KEY_SPACE:
+	if not playing or not interactive or not event is InputEventKey:
+		return
+	if event.keycode == KEY_SPACE:
 		if event.pressed and not event.echo:
 			_hold_start()
 		elif not event.pressed:
 			_hold_end()
+	elif event.pressed and not event.echo:
+		match event.keycode:
+			KEY_UP: _swipe("up")
+			KEY_DOWN: _swipe("down")
+			KEY_LEFT: _swipe("left")
+			KEY_RIGHT: _swipe("right")
 
 
-# Press-down: offense grades the tap immediately; defense raises the guard.
+# Turn a touch displacement into a directional swipe once it's long enough.
+func _try_swipe(delta_pos: Vector2) -> void:
+	if delta_pos.length() < SWIPE_MIN_DIST:
+		return
+	swipe_consumed = true
+	var dir := "right" if delta_pos.x > 0 else "left"
+	if absf(delta_pos.y) > absf(delta_pos.x):
+		dir = "down" if delta_pos.y > 0 else "up"
+	_swipe(dir)
+
+
+# A completed swipe: for offense, both the DIRECTION and the MOMENT the
+# swipe completed are graded — wrong direction is a Miss no matter the
+# timing. Defense ignores swipes (it's hold/release).
+func _swipe(dir: String) -> void:
+	if not playing or not interactive or phase != Phase.QTE:
+		return
+	if qte["kind"] != "offense" or qte["step_t"] < 0.0 or qte["step_done"]:
+		return
+	var wanted: String = qte["spec"]["swipes"][qte["step"]]
+	if dir != wanted:
+		_record_press({"points": 0.0, "text": "Miss", "color": Color("8a90a0")})
+		return
+	var period: float = qte["spec"]["periods"][qte["step"]]
+	_record_press(grade_press(absf(qte["step_t"] - period), qte["spec"]))
+
+
+# Guard up (defense only — offense is driven by completed swipes).
 func _hold_start() -> void:
 	if not playing or not interactive or phase != Phase.QTE:
 		return
-	if qte["kind"] == "offense":
-		if qte["step_t"] < 0.0 or qte["step_done"]:
-			return  # ignore presses in the wind-up
-		var period: float = qte["spec"]["periods"][qte["step"]]
-		_record_press(grade_press(absf(qte["step_t"] - period), qte["spec"]))
-	elif qte["state"] == "waiting":
+	if qte["kind"] == "defense" and qte["state"] == "waiting":
 		qte["state"] = "holding"
 
 
@@ -590,14 +648,27 @@ func _draw_offense_qte(font: Font) -> void:
 	# target ring
 	draw_arc(RING_POS, RING_END, 0, TAU, 48, color, 3.0)
 
+	# required swipe direction, drawn as an arrow inside the target ring
+	_draw_swipe_arrow(SWIPE_DIRS[qte["spec"]["swipes"][qte["step"]]], color)
+
 	# shrinking ring (only once the wind-up is over)
 	if qte["step_t"] >= 0.0 and not qte["step_done"]:
 		var k: float = minf(1.0, qte["step_t"] / period)
 		var r := RING_START - (RING_START - RING_END) * k
 		draw_arc(RING_POS, r, 0, TAU, 48, color, 4.0)
 
-	draw_string(font, RING_POS + Vector2(-120, 48), "SPACE / CLICK",
+	draw_string(font, RING_POS + Vector2(-120, 48), "SWIPE WITH THE ARROW",
 			HORIZONTAL_ALIGNMENT_CENTER, 240, 11, Color(1, 1, 1, 0.55 * panel_alpha))
+
+
+func _draw_swipe_arrow(dir: Vector2, color: Color) -> void:
+	var tip := RING_POS + dir * 14.0
+	var tail := RING_POS - dir * 12.0
+	var side := Vector2(-dir.y, dir.x)  # perpendicular
+	draw_line(tail, tip - dir * 6.0, color, 4.0)
+	draw_colored_polygon(PackedVector2Array([
+		tip, tip - dir * 10.0 + side * 7.0, tip - dir * 10.0 - side * 7.0,
+	]), color)
 
 
 func _draw_defense_qte(font: Font) -> void:
@@ -643,7 +714,7 @@ func _draw_defense_qte(font: Font) -> void:
 
 	var hint := ""
 	if qte["state"] == "waiting":
-		hint = "HOLD SPACE / MOUSE TO GUARD"
+		hint = "HOLD TO GUARD"
 	elif holding:
 		hint = "RELEASE AS THE BLOW LANDS!"
 	if hint != "":

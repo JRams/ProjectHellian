@@ -34,6 +34,9 @@ const TERRAIN_CHARS := {
 # Offense: each class has a unique attack pattern — `periods` is the seconds
 # between successive press targets (one entry per press); `perfect`/`good`
 # are the timing tolerances in seconds.
+# On touch (this branch): each offense step is a SWIPE in the listed
+# direction, graded at the moment the swipe crosses the distance threshold;
+# a wrong-direction swipe is a Miss. Patterns are themed per class.
 # Defense is a HOLD-AND-RELEASE parry: press and hold while the attacker
 # winds up (`windup`) and charges in (`travel`), then release as the blow
 # lands. Tolerances grade the release against the impact moment.
@@ -78,7 +81,7 @@ static var unit_classes := {
 		"defense": 13, "resistance": 3, "movement": 4,
 		"attack_range": [1], "might": 8, "hit": 80, "crit": 0,
 		"description": "Armored wall. Hits hard, moves slow, shrugs off physical damage.",
-		"qte": {"periods": [1.1], "perfect": 0.07, "good": 0.16},
+		"qte": {"swipes": ["down"], "periods": [1.1], "perfect": 0.07, "good": 0.16},
 	}),
 	"Mercenary": UnitClass.new({
 		"display_name": "Mercenary", "icon": "M", "weapon": "Steel Sword",
@@ -86,7 +89,8 @@ static var unit_classes := {
 		"defense": 6, "resistance": 4, "movement": 5,
 		"attack_range": [1], "might": 7, "hit": 95, "crit": 10,
 		"description": "Balanced swordfighter. Accurate, fast, doubles slower foes.",
-		"qte": {"periods": [0.55, 0.55, 0.55], "perfect": 0.055, "good": 0.12},
+		"qte": {"swipes": ["right", "left", "right"],
+			"periods": [0.55, 0.55, 0.55], "perfect": 0.055, "good": 0.12},
 	}),
 	"Cavalier": UnitClass.new({
 		"display_name": "Cavalier", "icon": "C", "weapon": "Iron Lance",
@@ -94,7 +98,7 @@ static var unit_classes := {
 		"defense": 9, "resistance": 4, "movement": 7,
 		"attack_range": [1], "might": 8, "hit": 85, "crit": 0, "is_mounted": true,
 		"description": "Mounted lancer. High movement, but mountains block the horse.",
-		"qte": {"periods": [0.7, 0.45], "perfect": 0.06, "good": 0.13},
+		"qte": {"swipes": ["right", "right"], "periods": [0.7, 0.45], "perfect": 0.06, "good": 0.13},
 	}),
 	"Archer": UnitClass.new({
 		"display_name": "Archer", "icon": "A", "weapon": "Iron Bow",
@@ -102,7 +106,7 @@ static var unit_classes := {
 		"defense": 5, "resistance": 3, "movement": 5,
 		"attack_range": [2], "might": 7, "hit": 90, "crit": 5,
 		"description": "Attacks at range 2 only. Safe from melee counters, weak up close.",
-		"qte": {"periods": [0.8], "perfect": 0.04, "good": 0.09},
+		"qte": {"swipes": ["up"], "periods": [0.8], "perfect": 0.04, "good": 0.09},
 	}),
 	"Mage": UnitClass.new({
 		"display_name": "Mage", "icon": "W", "weapon": "Fire Tome",
@@ -110,7 +114,7 @@ static var unit_classes := {
 		"defense": 3, "resistance": 10, "movement": 5,
 		"attack_range": [1, 2], "might": 6, "hit": 90, "crit": 0, "is_magic": true,
 		"description": "Magic damage targets resistance. Melts armored units.",
-		"qte": {"periods": [0.9, 0.5], "perfect": 0.06, "good": 0.13},
+		"qte": {"swipes": ["up", "down"], "periods": [0.9, 0.5], "perfect": 0.06, "good": 0.13},
 	}),
 	"Healer": UnitClass.new({
 		"display_name": "Healer", "icon": "H", "weapon": "Heal Staff",
@@ -125,7 +129,8 @@ static var unit_classes := {
 		"defense": 5, "resistance": 9, "movement": 7,
 		"attack_range": [1], "might": 6, "hit": 90, "crit": 5, "is_flier": true,
 		"description": "Flier: ignores all terrain. Fast and evasive, but fragile.",
-		"qte": {"periods": [0.45, 0.4, 0.35], "perfect": 0.05, "good": 0.11},
+		"qte": {"swipes": ["up", "right", "down"],
+			"periods": [0.45, 0.4, 0.35], "perfect": 0.05, "good": 0.11},
 	}),
 }
 
