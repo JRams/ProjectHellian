@@ -115,15 +115,55 @@ touched two files.
 browser with touch working — worth knowing as a zero-store distribution
 path for playtesting.
 
-## Open questions for your review
+## Round 2 — review decisions applied
 
-1. **Orientation** — the prototype keeps landscape (matches the wide
-   battle vignette). Portrait would mean redesigning the sidebar into a
-   bottom sheet. Preference?
-2. **Swipe patterns per class** — directions above are flavor guesses;
-   happy to tune (should Mage be a circle gesture? Godot can match those
-   too, it's just more detection code).
-3. **Scope** — confirm Option A, or go straight to B (pan/zoom camera)?
-4. **Haptics** — `Input.vibrate_handheld()` on Perfect/Parried is a
-   one-liner and feels great on phones. Add it?
-5. **Keep keyboard fallbacks** in the mobile build, or strip them?
+Feedback from the first review, now implemented on this branch:
+
+1. **Portrait orientation** (was open question 1). The viewport is now
+   540×960 with `sensor_portrait`. The map screen stacks vertically —
+   banner, board (the Board/Units nodes are simply `scale = 0.75`, and
+   because input conversion uses `get_local_mouse_position()`, tap
+   detection survived the rescale with zero code changes — that was the
+   point of doing coordinate math in local space), then controls, info,
+   and log below.
+2. **Vertical battle vignette.** The enemy fights from the TOP of the
+   panel, your unit from the BOTTOM; lunges travel vertically, dodges and
+   hit-shakes sideways. HP plates sit above (enemy) and below (player)
+   the scene. Placement is by *team*, not by who initiated — so the
+   camera language is consistent: down = incoming, up = outgoing.
+3. **Dedicated swipe pad.** A bordered zone at the bottom of the vignette
+   is the controller; the scene above is just the view. All QTE prompts
+   (offense ring + arrow, defense gauge, deflect spot) render inside the
+   pad, and only touches that **start inside the pad** count during a
+   QTE — resting a thumb on the scene does nothing. The pad's border
+   takes the QTE color (blue/green/red) as a peripheral-vision cue.
+4. **Haptics on parries.** `Input.vibrate_handheld(70)` on **Parried!**,
+   `(35)` on **Blocked** — a strong buzz for the perfect window, a tick
+   for the good one. No-op on desktop, works on Android/iOS exports.
+5. **Keyboard fallbacks kept**: arrow keys swipe, Space is the hold
+   finger (and always "arms" a deflect — the position requirement is a
+   touch-only mechanic).
+6. **NEW — the deflect parry** (positional). Physical attackers are
+   parried with the existing hold-and-release. **Magic attackers demand a
+   deflect**: a spot lights up somewhere in the pad (one of three
+   anchors, randomized) with a direction arrow — put your finger ON the
+   spot to arm, hold while the spell charges, then **swipe the shown
+   direction as it lands** to fling it aside. Grading mirrors the hold
+   parry (Parried! 50% / Blocked 75%), with two new failure shapes:
+   wrong spot = your guard is up but can't deflect (Guarded 90% at
+   best); wrong swipe direction = guard broken (Exposed 100%). The
+   attack-type → parry-type rule is deliberate: the player can read
+   "mage incoming" on the map and know which motion is coming.
+
+## Still open for review
+
+1. **Deflect trigger rule** — currently magic attacks only. Alternatives:
+   heavy chargers (Knight/Cavalier) too, or a random mix per strike.
+2. **Swipe patterns per class** — directions are flavor guesses; happy to
+   tune (a circle gesture for the Mage is possible, just more detection
+   code).
+3. **Scope** — Option B (pan/zoom camera for bigger maps) remains the
+   natural next step after this shape is approved.
+4. **Portrait map screen polish** — the board currently scales to fit;
+   a real mobile pass would enlarge touch targets and rethink the
+   info/log panels as collapsible sheets.

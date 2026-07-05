@@ -80,7 +80,23 @@ func _test_qte(game: Game) -> int:
 			or BattleVignette.defense_result(early)["mult"] != 1.0 \
 			or BattleVignette.defense_result(held)["mult"] != 0.9 \
 			or BattleVignette.defense_result(none)["mult"] != 1.0:
-		print("FAILED: parry multipliers wrong")
+		print("FAILED: hold-parry multipliers wrong")
+		failures += 1
+
+	# Deflect parry (mode "deflect"): swiped is graded on timing; a broken
+	# guard (wrong direction / early release maps to "released") is exposed;
+	# holding without the swipe is a plain guard.
+	var d_parry := {"mode": "deflect", "state": "swiped", "swipe_err": 0.02, "spec": dspec}
+	var d_block := {"mode": "deflect", "state": "swiped", "swipe_err": 0.12, "spec": dspec}
+	var d_late := {"mode": "deflect", "state": "swiped", "swipe_err": 0.5, "spec": dspec}
+	var d_hold := {"mode": "deflect", "state": "holding", "armed": false, "spec": dspec}
+	var d_broken := {"mode": "deflect", "state": "released", "spec": dspec}
+	if BattleVignette.defense_result(d_parry)["mult"] != 0.5 \
+			or BattleVignette.defense_result(d_block)["mult"] != 0.75 \
+			or BattleVignette.defense_result(d_late)["mult"] != 1.0 \
+			or BattleVignette.defense_result(d_hold)["mult"] != 0.9 \
+			or BattleVignette.defense_result(d_broken)["mult"] != 1.0:
+		print("FAILED: deflect-parry multipliers wrong")
 		failures += 1
 
 	# Strike order: merc (spd 11) vs knight (spd 3) at range 1 = merc doubles.

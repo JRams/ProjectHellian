@@ -9,11 +9,13 @@
 script = ExtResource("1_main")
 
 [node name="Board" type="Node2D" parent="."]
-position = Vector2(16, 72)
+position = Vector2(6, 50)
+scale = Vector2(0.75, 0.75)
 script = ExtResource("2_board")
 
 [node name="Units" type="Node2D" parent="."]
-position = Vector2(16, 72)
+position = Vector2(6, 50)
+scale = Vector2(0.75, 0.75)
 
 [node name="SimTimer" type="Timer" parent="."]
 one_shot = true
@@ -22,21 +24,21 @@ one_shot = true
 script = ExtResource("3_ui")
 
 [node name="Banner" type="Label" parent="UI"]
-offset_left = 16.0
-offset_top = 24.0
-offset_right = 720.0
-offset_bottom = 60.0
-theme_override_font_sizes/font_size = 20
+offset_left = 8.0
+offset_top = 10.0
+offset_right = 532.0
+offset_bottom = 42.0
+theme_override_font_sizes/font_size = 18
 text = "Turn 1 — Player Phase"
 horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="Sidebar" type="VBoxContainer" parent="UI"]
-offset_left = 740.0
-offset_top = 24.0
-offset_right = 1088.0
-offset_bottom = 608.0
-theme_override_constants/separation = 10
+offset_left = 10.0
+offset_top = 458.0
+offset_right = 530.0
+offset_bottom = 950.0
+theme_override_constants/separation = 8
 
 [node name="Controls" type="HBoxContainer" parent="UI/Sidebar"]
 theme_override_constants/separation = 8
@@ -68,14 +70,14 @@ text = "Player 7 · Enemy 7"
 [node name="InfoPanel" type="PanelContainer" parent="UI/Sidebar"]
 
 [node name="Info" type="RichTextLabel" parent="UI/Sidebar/InfoPanel"]
-custom_minimum_size = Vector2(0, 170)
+custom_minimum_size = Vector2(0, 118)
 bbcode_enabled = true
 fit_content = true
 
 [node name="LogPanel" type="PanelContainer" parent="UI/Sidebar"]
 
 [node name="Log" type="RichTextLabel" parent="UI/Sidebar/LogPanel"]
-custom_minimum_size = Vector2(0, 230)
+custom_minimum_size = Vector2(0, 130)
 bbcode_enabled = true
 scroll_following = true
 
@@ -85,7 +87,7 @@ fit_content = true
 text = "[b]How to play[/b]
 [color=#9aa0ae]Click a [b]blue unit[/b] — blue tiles show its movement range (cardinal steps only). Click a tile to move. Enemies in range glow [b]red[/b]; click one to attack (hover for the forecast). Click anywhere else to wait.
 [b]Attacking:[/b] [b]swipe in the arrow's direction[/b] (drag with mouse on desktop, or use arrow keys) when the shrinking ring meets the target. Each class has its own swipe pattern — chain every one perfectly for [b]MAX! damage (1.5×)[/b]. [color=#4a90d9]Blue[/color] = physical, [color=#3ecf6e]green[/color] = magic.
-[color=#e04848][b]Defending:[/b][/color] when an enemy charges you, [b]press and hold[/b] to raise your guard, then [b]release as the blow lands[/b] — a perfect release [b]parries (50% damage)[/b]; holding through still guards (90%); dropping your guard early leaves you exposed.
+[color=#e04848][b]Defending:[/b][/color] all guarding happens in the swipe pad. Physical attacks: [b]hold[/b] anywhere in the pad, [b]release as the blow lands[/b] to parry (50% damage). Magic attacks: [b]hold the lit spot[/b], then [b]swipe the shown direction[/b] as it lands to deflect. Holding through still guards (90%); a dropped guard or wrong direction leaves you exposed. Good parries buzz the phone.
 [b]Simulate[/b] lets the AI play both armies (no QTEs).[/color]"
 
 [node name="Forecast" type="PanelContainer" parent="UI"]
