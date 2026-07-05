@@ -413,6 +413,10 @@ and please fix-and-commit (the docs and structure won't change).
 
 ## Where to go next (each teaches one engine system)
 
+> Open decisions, tuning knobs, and every caveat noted along the way are
+> consolidated in [DECISIONS-TO-MAKE.md](DECISIONS-TO-MAKE.md) — read it
+> before carrying the project forward.
+
 1. **TileMapLayer + a tile atlas** — replace `board.gd`'s terrain drawing
    with real tiles. Teaches: TileSet resources, atlases, terrain sets.
 2. **Resources (`.tres`)** — lift `UnitClass` definitions out of

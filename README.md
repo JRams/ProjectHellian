@@ -10,6 +10,11 @@ of seven fight across a river — available in two implementations:
   of how the prototype was integrated into the engine (written as a
   learning guide for programmers new to game engines).
 
+Open design questions, tuning knobs, and carry-forward caveats are
+tracked in [docs/DECISIONS-TO-MAKE.md](docs/DECISIONS-TO-MAKE.md);
+the mobile/swipe experiment lives on the `claude/mobile-swipe-prototype`
+branch (see [docs/MOBILE_SWIPE.md](docs/MOBILE_SWIPE.md)).
+
 ## Running the demo
 
 **Browser version** — no build step, no dependencies:
