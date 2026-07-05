@@ -155,6 +155,43 @@ Feedback from the first review, now implemented on this branch:
    attack-type → parry-type rule is deliberate: the player can read
    "mage incoming" on the map and know which motion is coming.
 
+## Round 3 — procedural art pass
+
+The placeholder look (flat tiles, lettered circles) is replaced by a
+procedural art module, `godot/scripts/art.gd` (`BattleArt`) — still zero
+image assets; everything is `draw_*` calls, iterated pixel-first in a
+canvas mock and then ported:
+
+- **Terrain-aware battle backdrops.** The vignette reads the *defender's
+  map tile* and stages the duel there, Fire Emblem style: plains with
+  wildflowers, a pine forest with a treeline and framing trees, rocky
+  crags with snowcaps, a river with a plank bridge deck the fighters
+  stand on, or a fort wall with a banner. All variants share a layered
+  composition: gradient dusk sky, sun with glow, clouds, birds, two
+  ridgelines, gradient ground, grass tufts, and an edge vignette.
+- **Class figures instead of lettered circles.** Pokémon-style staging:
+  the enemy is drawn in ¾ front view at the top, your unit from behind
+  at the bottom. Each class is a distinct flat-shaded vector figure —
+  armored Knight with tower shield and plume, bandana'd Mercenary with
+  raised sword, mounted Cavalier, hooded Archer with bow, Mage with
+  pointed hat and floating tome, robed Healer with glowing staff,
+  winged Pegasus rider.
+- **Textured map tiles** (`BattleArt.draw_map_tile`, used by `board.gd`):
+  grass speckle, canopy trees with shadows, faceted snow-capped peaks,
+  gradient water with waves, plank bridges, stone forts with gates.
+  Map unit tokens got contact shadows and a faked radial highlight.
+- **UI chrome**: bronze-trimmed panel and plates (StyleBoxFlat), team
+  ribbons on the HP plates, HP bars with a sheen, corner ticks on the
+  swipe pad, drop shadows under popup text.
+- Detail placement uses a deterministic LCG (same constants in the JS
+  mock and GDScript), so scenes are stable frame to frame and identical
+  across the prototype and the engine.
+
+The natural end-state is still real sprite/tile assets — when that day
+comes, `BattleArt` is the single file to swap, and the backdrop's
+terrain-key contract (`draw_backdrop(ci, rect, terrain)`) is exactly the
+interface a texture-based version would keep.
+
 ## Still open for review
 
 1. **Deflect trigger rule** — currently magic attacks only. Alternatives:

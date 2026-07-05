@@ -71,6 +71,12 @@ var bot_f := {}   # the player-team fighter (fights from the bottom)
 var popups: Array = []
 var flash := 0.0
 var panel_alpha := 0.0
+var battle_terrain := "plain"  # the defender's tile drives the backdrop
+
+# panel chrome (built once; StyleBoxFlat gives rounded corners + borders)
+var panel_style := _make_style(Color("14161d"), 10, Color("6a5a3a"), 2)
+var plate_style := _make_style(Color(0.09, 0.10, 0.13, 0.96), 6, Color("6a5a3a"), 1)
+var pad_style := _make_style(Color(0.055, 0.063, 0.086, 0.95), 8, Color("e04848"), 2)
 
 # replay mode
 var beats: Array = []
@@ -93,6 +99,15 @@ var finish_called := false
 var touch_start := Vector2.ZERO
 var touch_active := false
 var swipe_consumed := false
+
+
+static func _make_style(bg: Color, radius: int, border: Color, border_w: int) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.set_corner_radius_all(radius)
+	sb.border_color = border
+	sb.set_border_width_all(border_w)
+	return sb
 
 
 # --- QTE grading (static so the headless test can exercise it) ----------------
@@ -163,6 +178,8 @@ func _setup_scene(p_battle: Dictionary) -> void:
 	else:
 		top_f = _make_fighter(def_u, -1, p_battle["defender_hp_before"])
 		bot_f = _make_fighter(att, 1, p_battle["attacker_hp_before"])
+	var tile_ch: String = GameData.MAP_LAYOUT[def_u.pos.y][def_u.pos.x]
+	battle_terrain = GameData.TERRAIN_CHARS[tile_ch]
 	popups = []
 	flash = 0.0
 	panel_alpha = 0.0
@@ -655,7 +672,7 @@ func _ease_out(t: float) -> float:
 # hit-shakes displace horizontally.
 func _fighter_pos(f: Dictionary) -> Vector2:
 	var other: Dictionary = bot_f if f == top_f else top_f
-	var towards: float = (other["home_y"] - f["home_y"]) * 0.62
+	var towards: float = (other["home_y"] - f["home_y"]) * 0.54
 	var x := CENTER_X
 	var y: float = f["y"] + towards * _ease_out(f["lunge"])
 	if f["dodge"] > 0.0:
@@ -674,29 +691,34 @@ func _draw() -> void:
 		return
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.45 * panel_alpha))
 
-	draw_set_transform(_panel_origin())
+	var origin := _panel_origin()
+	draw_set_transform(origin)
 
 	var a := panel_alpha
 	var font := ThemeDB.fallback_font
 
-	# panel
-	draw_rect(Rect2(0, 0, VW, VH), Color(0.09, 0.10, 0.13, 0.97 * a))
-	draw_rect(Rect2(0, 0, VW, VH), Color(0.23, 0.25, 0.30, a), false, 2.0)
-	# sky
-	var strips := 10
-	for i in strips:
-		var c := Color("313a4d").lerp(Color("20242f"), float(i) / (strips - 1))
-		c.a = a
-		draw_rect(Rect2(SCENE_RECT.position.x,
-				SCENE_RECT.position.y + i * SCENE_RECT.size.y / strips,
-				SCENE_RECT.size.x, SCENE_RECT.size.y / strips), c)
-	# platforms under each fighter
-	for f: Dictionary in [top_f, bot_f]:
-		_draw_ellipse(Vector2(CENTER_X, f["home_y"] + 44.0), Vector2(74, 14),
-				Color(0, 0, 0, 0.35 * a))
+	# panel chrome: bronze-trimmed frame. Fading the whole subtree with
+	# self_modulate lets the backdrop keep its own per-shape alphas.
+	self_modulate = Color(1, 1, 1, a)
+	panel_style.bg_color = Color(0.078, 0.086, 0.113, 0.97)
+	draw_style_box(panel_style, Rect2(0, 0, VW, VH))
 
+	# the setting: terrain-aware layered backdrop (from the defender's tile)
+	BattleArt.draw_backdrop(self, SCENE_RECT, battle_terrain)
+	draw_rect(SCENE_RECT, Color(0.78, 0.67, 0.43, 0.25), false, 1.0)
+
+	# fighters as figures. draw_figure manages its own canvas transforms for
+	# rotated weapons, so drop to identity and pass absolute positions.
+	draw_set_transform(Vector2.ZERO)
 	for f: Dictionary in [top_f, bot_f]:
-		_draw_fighter(f, font)
+		if f["alpha"] > 0.02:
+			var unit: Unit = f["unit"]
+			var colors: Dictionary = GameData.team_colors[unit.team]
+			BattleArt.draw_figure(self, origin + _fighter_pos(f), unit.u_class.icon,
+					colors["main"], colors["dark"], f["side"] == -1,
+					1.05 if f["side"] == -1 else 1.2)
+	draw_set_transform(origin)
+
 	_draw_hp_box(top_f, TOP_BOX_Y, font)
 	_draw_hp_box(bot_f, BOT_BOX_Y, font)
 	_draw_pad(font)
@@ -711,6 +733,9 @@ func _draw() -> void:
 		var col: Color = p["color"]
 		col.a = a * (1.0 - k * k)
 		var pos: Vector2 = p["pos"] - Vector2(120, 26.0 * k)
+		draw_string(font, pos + Vector2(1.5, 1.5), p["text"],
+				HORIZONTAL_ALIGNMENT_CENTER, 240, p["size"],
+				Color(0, 0, 0, col.a * 0.8))
 		draw_string(font, pos, p["text"], HORIZONTAL_ALIGNMENT_CENTER, 240,
 				p["size"], col)
 
@@ -723,13 +748,20 @@ func _draw() -> void:
 # The dedicated swipe area at the bottom of the panel.
 func _draw_pad(font: Font) -> void:
 	var a := panel_alpha
-	draw_rect(PAD_RECT, Color(0.05, 0.06, 0.08, 0.9 * a))
 	var border := Color(0.30, 0.33, 0.40, a)
 	if interactive and phase == Phase.QTE and not qte.is_empty():
 		border = qte["color"]
 		border.a = a * 0.8
-	draw_rect(PAD_RECT, border, false, 2.0)
-	draw_string(font, PAD_RECT.position + Vector2(10, 18), "SWIPE AREA",
+	pad_style.border_color = border
+	draw_style_box(pad_style, PAD_RECT)
+	# bronze corner ticks
+	var tick := Color(0.78, 0.67, 0.43, 0.4 * a)
+	for corner: Array in [[28.0, 560.0, 1.0, 1.0], [412.0, 560.0, -1.0, 1.0],
+			[28.0, 772.0, 1.0, -1.0], [412.0, 772.0, -1.0, -1.0]]:
+		var c := Vector2(corner[0], corner[1])
+		draw_line(c + Vector2(corner[2] * 10.0, 0), c, tick, 2.0)
+		draw_line(c, c + Vector2(0, corner[3] * 10.0), tick, 2.0)
+	draw_string(font, PAD_RECT.position + Vector2(16, 19), "SWIPE AREA",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.3 * a))
 
 
@@ -839,48 +871,31 @@ func _draw_swipe_arrow(at: Vector2, dir: Vector2, color: Color) -> void:
 	]), color)
 
 
-func _draw_ellipse(center: Vector2, radii: Vector2, color: Color) -> void:
-	var pts := PackedVector2Array()
-	for i in 24:
-		var ang := TAU * i / 24.0
-		pts.append(center + Vector2(cos(ang) * radii.x, sin(ang) * radii.y))
-	draw_colored_polygon(pts, color)
-
-
-func _draw_fighter(f: Dictionary, font: Font) -> void:
-	var unit: Unit = f["unit"]
-	var pos := _fighter_pos(f)
-	var colors: Dictionary = GameData.team_colors[unit.team]
-	var fa: float = panel_alpha * f["alpha"]
-	var body: Color = colors["main"]
-	body.a = fa
-	var rim: Color = colors["dark"]
-	rim.a = fa
-	draw_circle(pos, 34, body)
-	draw_arc(pos, 34, 0, TAU, 48, rim, 4.0)
-	draw_string(font, pos + Vector2(-40, 12), unit.u_class.icon,
-			HORIZONTAL_ALIGNMENT_CENTER, 80, 34, Color(1, 1, 1, fa))
-
-
 func _draw_hp_box(f: Dictionary, by: float, font: Font) -> void:
 	var unit: Unit = f["unit"]
 	var a := panel_alpha
 	var bx := 20.0
 	var w := VW - 40.0
-	draw_rect(Rect2(bx, by, w, 58), Color(0.05, 0.05, 0.07, 0.92 * a))
-	draw_rect(Rect2(bx, by, w, 58), Color(0.23, 0.25, 0.30, a), false, 2.0)
-	draw_string(font, Vector2(bx + 10, by + 18), unit.unit_name,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.91, 0.91, 0.93, a))
-	draw_string(font, Vector2(bx + 10, by + 33),
+	draw_style_box(plate_style, Rect2(bx, by, w, 58))
+	# team ribbon on the left edge
+	var tc: Dictionary = GameData.team_colors[unit.team]
+	var ribbon: Color = tc["main"]
+	ribbon.a = a
+	draw_rect(Rect2(bx + 1, by + 2, 5, 54), ribbon)
+	draw_string(font, Vector2(bx + 16, by + 20), unit.unit_name,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.94, 0.93, 0.9, a))
+	draw_string(font, Vector2(bx + 16, by + 35),
 			"%s · %s" % [unit.u_class.display_name, unit.u_class.weapon],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.60, 0.63, 0.68, a))
-	var bar_w := w - 72.0
-	draw_rect(Rect2(bx + 10, by + 40, bar_w, 10), Color(0, 0, 0, 0.6 * a))
+	var bar_w := w - 84.0
+	draw_rect(Rect2(bx + 16, by + 41, bar_w, 11), Color(0, 0, 0, 0.65 * a))
 	var frac: float = maxf(0.0, f["shown_hp"] / unit.max_hp)
-	var bar := Color("5ad35a") if frac > 0.5 \
+	var bar := Color("4fc94f") if frac > 0.5 \
 			else (Color("e8c33a") if frac > 0.25 else Color("e05050"))
 	bar.a = a
-	draw_rect(Rect2(bx + 11, by + 41, (bar_w - 2.0) * frac, 8), bar)
-	draw_string(font, Vector2(bx + w - 66, by + 50),
+	draw_rect(Rect2(bx + 17, by + 42, (bar_w - 2.0) * frac, 9), bar)
+	var sheen := bar.lightened(0.35)
+	draw_rect(Rect2(bx + 17, by + 42, (bar_w - 2.0) * frac, 4), sheen)
+	draw_string(font, Vector2(bx + w - 66, by + 52),
 			"%d/%d" % [ceili(f["shown_hp"]), unit.max_hp],
-			HORIZONTAL_ALIGNMENT_RIGHT, 56, 13, Color(0.91, 0.91, 0.93, a))
+			HORIZONTAL_ALIGNMENT_RIGHT, 56, 13, Color(0.94, 0.93, 0.9, a))

@@ -47,7 +47,13 @@ func _draw() -> void:
 
 	if selected:
 		draw_circle(Vector2(0, -2), 18, Color(1.0, 0.91, 0.3, 0.35))
+	# contact shadow + shaded disc (faked radial highlight)
+	BattleArt.draw_ellipse(self, Vector2(0, 10), Vector2(12, 4), Color(0.04, 0.04, 0.06, 0.4))
 	draw_circle(Vector2(0, -2), 14, body)
+	var light: Color = Color("a5a5a5") if grayed else colors["light"]
+	light.a = 0.55
+	draw_circle(Vector2(-3, -6), 8, light)
+	draw_circle(Vector2(0, -2), 12, body * Color(1, 1, 1, 0.35))
 	draw_arc(Vector2(0, -2), 14, 0, TAU, 32, rim, 2.5)
 
 	# Class letter. _draw text needs an explicit font; use the theme default.
