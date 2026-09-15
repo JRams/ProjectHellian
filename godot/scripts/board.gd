@@ -40,8 +40,8 @@ func _draw() -> void:
 
 
 func _draw_terrain() -> void:
-	for y in GameData.MAP_H:
-		for x in GameData.MAP_W:
+	for y in GameData.map_h:
+		for x in GameData.map_w:
 			var cell := Vector2i(x, y)
 			var t := Grid.terrain_at(cell)
 			var color := t.color if (x + y) % 2 == 0 else t.color_alt
@@ -81,10 +81,10 @@ func _draw_terrain_detail(cell: Vector2i, t: TerrainType) -> void:
 
 func _draw_grid_lines() -> void:
 	var line := Color(0, 0, 0, 0.12)
-	for x in GameData.MAP_W + 1:
-		draw_line(Vector2(x * T, 0), Vector2(x * T, GameData.MAP_H * T), line)
-	for y in GameData.MAP_H + 1:
-		draw_line(Vector2(0, y * T), Vector2(GameData.MAP_W * T, y * T), line)
+	for x in GameData.map_w + 1:
+		draw_line(Vector2(x * T, 0), Vector2(x * T, GameData.map_h * T), line)
+	for y in GameData.map_h + 1:
+		draw_line(Vector2(0, y * T), Vector2(GameData.map_w * T, y * T), line)
 
 
 func _draw_highlights() -> void:

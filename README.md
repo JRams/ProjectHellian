@@ -10,10 +10,11 @@ of seven fight across a river — available in two implementations:
   of how the prototype was integrated into the engine (written as a
   learning guide for programmers new to game engines).
 
-Open design questions, tuning knobs, and carry-forward caveats are
-tracked in [docs/DECISIONS-TO-MAKE.md](docs/DECISIONS-TO-MAKE.md);
-the mobile/swipe experiment lives on the `claude/mobile-swipe-prototype`
-branch (see [docs/MOBILE_SWIPE.md](docs/MOBILE_SWIPE.md)).
+Maps are authored inside Godot — see [docs/MAP_EDITOR.md](docs/MAP_EDITOR.md).
+Open design questions, tuning knobs, and carry-forward caveats are tracked
+in [docs/DECISIONS-TO-MAKE.md](docs/DECISIONS-TO-MAKE.md). The mobile/swipe
+experiment lives on the `claude/mobile-swipe-prototype` branch, documented
+in `docs/MOBILE_SWIPE.md` there.
 
 ## Running the demo
 
@@ -29,7 +30,9 @@ npx serve .              # then visit the printed URL
 
 **Godot version** — install [Godot 4.5](https://godotengine.org/download),
 then Import → `godot/project.godot` → F5. Headless battle-simulation test:
-`cd godot && godot --headless -s tests/sim_test.gd`.
+`cd godot && godot --headless -s tests/sim_test.gd` (add
+`-- --map res://maps/<name>.tres` to validate and balance-test one map).
+Maps are painted in `godot/tools/map_workbench.tscn`.
 
 ## What's in the demo
 

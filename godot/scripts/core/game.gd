@@ -8,7 +8,6 @@ extends RefCounted
 signal log_added(entry: Dictionary)
 
 const NO_WINNER := -1
-const TURN_LIMIT := 60
 
 var units: Array = []            # Array of Unit
 var turn: Unit.Team = Unit.Team.PLAYER
@@ -29,9 +28,9 @@ func _init() -> void:
 func reset() -> void:
 	_next_unit_id = 1
 	units = []
-	for row: Array in GameData.PLAYER_ARMY:
+	for row: Array in GameData.player_army:
 		units.append(_make_unit(row, Unit.Team.PLAYER))
-	for row: Array in GameData.ENEMY_ARMY:
+	for row: Array in GameData.enemy_army:
 		units.append(_make_unit(row, Unit.Team.ENEMY))
 	turn = Unit.Team.PLAYER
 	turn_count = 1
@@ -174,14 +173,14 @@ func end_turn() -> void:
 	else:
 		turn = Unit.Team.PLAYER
 		turn_count += 1
-		if turn_count > TURN_LIMIT:
+		if turn_count > GameData.turn_limit:
 			decide_by_attrition()
 			return
 		add_log("— Turn %d: Player phase —" % turn_count, "phase")
 
 
 # Safety valve for the simulation: if nobody routs the other side within
-# TURN_LIMIT turns (e.g. only healers remain), decide by units left, then HP.
+# GameData.turn_limit turns (set per map), decide by units left, then HP.
 func decide_by_attrition() -> void:
 	var score := func(team: int) -> int:
 		var alive := living_units(team)

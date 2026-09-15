@@ -14,6 +14,10 @@ enum Auto { NONE, ENEMY_PHASE, SIMULATE }
 
 const UNIT_SCENE := preload("res://scenes/unit.tscn")
 
+## The scenario to play. Swap this in the Inspector to change maps; maps are
+## authored in tools/map_workbench.tscn. Leave null to use the built-in map.
+@export var map: MapData
+
 var game: Game
 var state := State.IDLE
 var auto := Auto.NONE
@@ -36,6 +40,10 @@ var unit_nodes := {}      # unit id -> UnitNode
 
 
 func _ready() -> void:
+	# Load the map before the Game is built — Game.reset() reads the rosters
+	# out of GameData, which is what MapData.apply() populates.
+	if map != null:
+		map.apply()
 	game = Game.new()
 	game.log_added.connect(ui.on_log_added)
 	ui.simulate_toggled.connect(_on_simulate_toggled)

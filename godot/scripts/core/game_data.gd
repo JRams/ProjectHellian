@@ -6,8 +6,10 @@ extends RefCounted
 
 const TILE := 44  # pixel size of one grid tile (used by the renderer)
 
+# The built-in scenario. Kept as a const default so the game still boots
+# with a playable map if no MapData resource is loaded.
 # Map legend: . plain, f forest, m mountain, ~ water, = bridge, F fort
-const MAP_LAYOUT: Array[String] = [
+const DEFAULT_TERRAIN: Array[String] = [
 	"....f..~~...m...",
 	"..f....~~..mm..f",
 	".......~~...m...",
@@ -21,9 +23,6 @@ const MAP_LAYOUT: Array[String] = [
 	"....~~~~........",
 	"...~~~~....m..mm",
 ]
-
-const MAP_W := 16
-const MAP_H := 12
 
 const TERRAIN_CHARS := {
 	".": "plain", "f": "forest", "m": "mountain",
@@ -40,7 +39,7 @@ const TERRAIN_CHARS := {
 const DEFENSE_QTE := {"windup": 0.5, "travel": 0.9, "perfect": 0.07, "good": 0.16}
 
 # Starting rosters: [class name, x, y, personal name]
-const PLAYER_ARMY := [
+const DEFAULT_PLAYER_ARMY := [
 	["Knight", 1, 4, "Doran"],
 	["Mercenary", 2, 3, "Silke"],
 	["Cavalier", 1, 6, "Renny"],
@@ -50,7 +49,7 @@ const PLAYER_ARMY := [
 	["Pegasus", 3, 7, "Averil"],
 ]
 
-const ENEMY_ARMY := [
+const DEFAULT_ENEMY_ARMY := [
 	["Knight", 14, 5, "Gorm"],
 	["Mercenary", 13, 7, "Vask"],
 	["Cavalier", 14, 3, "Hessa"],
@@ -143,3 +142,27 @@ static var team_colors := {
 		"main": Color("d9534f"), "dark": Color("96342c"), "light": Color("f0938d"),
 	},
 }
+
+# --- Active map --------------------------------------------------------------
+# These five were consts until the map editor landed. They now hold whichever
+# scenario is currently loaded; MapData.apply() swaps them. Everything that
+# reads the board (Grid, Board, Game) goes through these names, so loading a
+# different map needs no changes anywhere else.
+static var map_layout: Array[String] = DEFAULT_TERRAIN.duplicate()
+static var map_w := DEFAULT_TERRAIN[0].length()
+static var map_h := DEFAULT_TERRAIN.size()
+static var player_army: Array = DEFAULT_PLAYER_ARMY.duplicate()
+static var enemy_army: Array = DEFAULT_ENEMY_ARMY.duplicate()
+static var current_map_name := "Grimwater Crossing"
+static var turn_limit := 60  # stalemate valve; set per-map by MapData
+
+
+# Restore the built-in scenario (used by tests and by the editor's preview).
+static func reset_to_default_map() -> void:
+	map_layout = DEFAULT_TERRAIN.duplicate()
+	map_w = DEFAULT_TERRAIN[0].length()
+	map_h = DEFAULT_TERRAIN.size()
+	player_army = DEFAULT_PLAYER_ARMY.duplicate()
+	enemy_army = DEFAULT_ENEMY_ARMY.duplicate()
+	current_map_name = "Grimwater Crossing"
+	turn_limit = 60

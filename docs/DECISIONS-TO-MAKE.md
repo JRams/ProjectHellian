@@ -13,14 +13,14 @@ stays the single source of truth.
 
 Three implementations exist and have diverged:
 
-| | `js/` (web) | `godot/` on main branch | `godot/` on `claude/mobile-swipe-prototype` |
-|---|---|---|---|
-| Layout | landscape | landscape | **portrait** |
-| Offense QTE | timed taps | timed taps | **directional swipes** |
-| Defense QTE | hold-release parry | hold-release parry | hold parry + **positional deflect** |
-| Haptics | — | — | on parries |
-| Art | placeholder | placeholder | **procedural art pass** (`art.gd`) |
-| Purpose | fast prototyping/testing | learning-guide reference | mobile direction |
+| | `js/` (web) | `godot/` on main | `claude/mobile-swipe-prototype` | `claude/map-editor` |
+|---|---|---|---|---|
+| Layout | landscape | landscape | **portrait** | landscape |
+| Offense QTE | timed taps | timed taps | **directional swipes** | timed taps |
+| Defense QTE | hold-release parry | hold-release parry | hold parry + **positional deflect** | hold-release parry |
+| Haptics | — | — | on parries | — |
+| Art | placeholder | placeholder | **procedural art pass** (`art.gd`) | placeholder + tile atlas |
+| Purpose | fast prototyping | learning-guide reference | mobile direction | **map authoring** |
 
 - [ ] **Decide the canonical shape.** If mobile-portrait is the game,
   merge the prototype branch and accept that the landscape layout is
@@ -36,6 +36,39 @@ Three implementations exist and have diverged:
   (the canvas source for the art already exists — it was designed in
   canvas first — but wiring it into `js/render.js`/`js/battle.js` is
   its own task).
+
+## 1b. Map editor branch (`claude/map-editor`) — merge decisions
+
+Built per §7 roadmap; see [MAP_EDITOR.md](MAP_EDITOR.md). Maps are no longer
+compiled into source: they are `MapData` resources painted in Godot, with
+structural validation and AI balance-testing.
+
+- [ ] **Merge it first.** It is the least entangled of the three branches —
+  it only adds `MapData` + tooling and changes how `GameData` stores the
+  active map — so it is the natural first merge however §1 is decided.
+- [ ] **BREAKING RENAME to mirror when merging.** Maps became loadable, so
+  these stopped being constants and took Godot's snake_case convention:
+  `GameData.MAP_LAYOUT → map_layout`, `MAP_W → map_w`, `MAP_H → map_h`,
+  `PLAYER_ARMY → player_army`, `ENEMY_ARMY → enemy_army`, and
+  `Game.TURN_LIMIT → GameData.turn_limit` (now per-map).
+  **The mobile branch will not compile until this is mirrored** — its
+  `battle_vignette.gd` reads `GameData.MAP_LAYOUT` to pick the battle
+  backdrop from the defender's tile.
+- [ ] **EditorPlugin dock?** Deliberately not built: a `@tool` scene reaches
+  the same capability with far less untested engine-API surface, and Godot's
+  own TileMap painter does the actual painting. A dock is a contained
+  follow-up if the workflow warrants it.
+- [ ] **Should the *game* also render via TileMapLayer?** Today the tile
+  layers are the editing surface only; `board.gd` still draws terrain
+  procedurally. The generated atlas is exactly the asset that unblocks
+  converting the renderer too (§7.6) — decide whether that churn is worth
+  it before or after real art exists.
+- [ ] **Objectives.** `MapData.objective` accepts rout/seize/survive but only
+  **rout** is implemented; validation WARNs on the others rather than
+  pretending. Implementing them pairs with multi-map support (§7.7).
+- [ ] **Where do maps live if the web version survives?** `.tres` is
+  Godot-only, so the workbench also exports `maps/<name>.json`. If the web
+  version stays load-bearing, wire its loader to that JSON (§1).
 
 ## 2. Combat & QTE design decisions
 
@@ -174,3 +207,8 @@ first; the AI plays both sides identically). Knobs, in `ai.js` /
 7. Game-design backlog from the original demo: weapon triangle,
    multiple maps/objectives (not just rout), inventories & weapon
    durability, campaign structure.
+
+**Done since this file was written:** map authoring — what was "maps are
+compiled into source" is now the `claude/map-editor` branch (MapData
+resources, a Godot-native painting workbench, validation, AI
+balance-testing). Its own open decisions are in §1b.

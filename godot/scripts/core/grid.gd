@@ -16,11 +16,11 @@ const CARDINALS: Array[Vector2i] = [
 
 
 static func in_bounds(p: Vector2i) -> bool:
-	return p.x >= 0 and p.x < GameData.MAP_W and p.y >= 0 and p.y < GameData.MAP_H
+	return p.x >= 0 and p.x < GameData.map_w and p.y >= 0 and p.y < GameData.map_h
 
 
 static func terrain_at(p: Vector2i) -> TerrainType:
-	var ch := GameData.MAP_LAYOUT[p.y][p.x]
+	var ch := GameData.map_layout[p.y][p.x]
 	return GameData.terrain_types[GameData.TERRAIN_CHARS[ch]]
 
 

@@ -1,0 +1,18 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://tools/map_workbench.gd" id="1_workbench"]
+[ext_resource type="TileSet" path="res://maps/tiles/hellian_tileset.tres" id="2_tileset"]
+[ext_resource type="Resource" path="res://maps/grimwater.tres" id="3_map"]
+
+[node name="MapWorkbench" type="Node2D"]
+script = ExtResource("1_workbench")
+map = ExtResource("3_map")
+grid_width = 16
+grid_height = 12
+playtest_battles = 25
+
+[node name="Terrain" type="TileMapLayer" parent="."]
+tile_set = ExtResource("2_tileset")
+
+[node name="Units" type="TileMapLayer" parent="."]
+tile_set = ExtResource("2_tileset")
