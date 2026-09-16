@@ -10,7 +10,9 @@ of seven fight across a river — available in two implementations:
   of how the prototype was integrated into the engine (written as a
   learning guide for programmers new to game engines).
 
-Maps are authored inside Godot — see [docs/MAP_EDITOR.md](docs/MAP_EDITOR.md).
+The plan for growing this into a full game (chapters, progression, dialogue)
+is [docs/GAME_PLAN.md](docs/GAME_PLAN.md). Maps are authored inside Godot —
+see [docs/MAP_EDITOR.md](docs/MAP_EDITOR.md).
 Open design questions, tuning knobs, and carry-forward caveats are tracked
 in [docs/DECISIONS-TO-MAKE.md](docs/DECISIONS-TO-MAKE.md). The mobile/swipe
 experiment lives on the `claude/mobile-swipe-prototype` branch, documented

@@ -192,6 +192,11 @@ first; the AI plays both sides identically). Knobs, in `ai.js` /
 
 ## 7. Roadmap (consolidated, roughly ordered)
 
+> Superseded in scope by [GAME_PLAN.md](GAME_PLAN.md), which lays out the
+> milestone path (M0–M9) from prototype to shipped game. The items below
+> remain accurate as the near-term engineering list; the plan's Part 8
+> names the five decisions that gate starting it.
+
 1. Run the Godot project for the first time; fix any first-run nits
    (item 6.1) and commit the uid updates.
 2. Playtest & tune: QTE windows, parry multipliers, AI knobs (§2–3).
