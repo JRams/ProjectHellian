@@ -27,7 +27,7 @@ all gain an attunement field).
 
 ## Gap 0 — Combat rule foundations: the attunement system
 
-**Status:** OPEN · **Milestone:** M1 (new, dedicated)
+**Status:** DECIDED (one sub-item pending — see #7 below) · **Milestone:** M1 (new, dedicated)
 
 ### Direction (given, not up for review)
 
@@ -41,10 +41,9 @@ unit **classes** are freed to define the *kit*: the addition pattern
 attacks at range, and whether it does so with **physical or magical**
 attributes. Combat will not be one-for-one with FE.
 
-> Assumption to confirm: the direction as given said "physical or
-> medical attributes". This is read as "physical or **magical**". A third
-> attribute, **support** (healers and, later, buffers), is proposed below
-> so that every class has exactly one attribute.
+> Confirmed: "physical or medical attributes" meant physical or
+> **magical**. A third attribute, **support** (healers and, later,
+> buffers), is confirmed so that every class has exactly one attribute.
 
 ### What's missing
 
@@ -70,30 +69,39 @@ the AI's expected-damage math read it, and the campaign balance sim (M3)
 is meaningless if the effectiveness rules change under it. Settle the
 rules first, then build the layers that store them.
 
-### Proposal
+### Proposal (now: settled shape)
 
-**1. The chart.** Data, not code: a table in `core/` mapping
-`(attacker_attunement, defender_attunement) → tier`, with the tier → number
-mapping kept in one place so the whole system is tuned from two tables.
+**1. The chart — settled.** Five elements in a single cycle, no Null:
 
-Three shapes considered:
+**Earth → Lightning → Fire → Wind → Water → Earth** (each beats the
+next, the loop closes).
 
-| Shape | Read | Risk |
-|---|---|---|
-| A. 3-cycle (X > Y > Z > X) | trivially memorable | it *is* the weapon triangle with new names |
-| **B. 4-cycle + Null (recommended)** | one strength, one weakness each; the opposite element is neutral; Null is neutral to all | needs four distinct visual identities |
-| C. 5–6 elements with multiple relations | Pokémon-like depth | fails "hold it in your head on a phone" |
+Data, not code: a table in `core/` mapping
+`(attacker_attunement, defender_attunement) → tier`. Five elements give
+ten ordered pairs of *distinct* elements. The cycle covers all ten with
+no extra rules needed:
 
-Recommended: **B.** Working placeholder names (rename freely):
-**Ember → Gale → Stone → Tide → Ember** (each beats the next), plus
-**Null** (unattuned: generic soldiers, tutorial enemies, some items).
-Ember/Stone and Gale/Tide are opposites and neutral to each other.
+- **Effective**: attacker's element is the one the defender's element
+  falls to in the cycle (Earth attacking Lightning, Lightning attacking
+  Fire, Fire attacking Wind, Wind attacking Water, Water attacking
+  Earth). 5 ordered pairs.
+- **Resisted**: the reverse of any Effective pair (Lightning attacking
+  Earth, Fire attacking Lightning, Wind attacking Fire, Water attacking
+  Wind, Earth attacking Water). 5 ordered pairs.
+- **Neutral**: everything else — same element on both sides, and the
+  two "non-adjacent" pairs each element has (e.g. Earth vs Fire, Earth
+  vs Wind are both Neutral; Earth only has a read against Lightning and
+  Water). 10 ordered pairs (5 same-element + 5 non-adjacent).
 
-**2. Tiers and numbers (v1, all tunable in one table).**
+Every unit must be assigned one of the five — **there is no Null /
+unattuned tier**, including generic enemies (decision #9).
+
+**2. Tiers and numbers (v1, locked as a starting point — all tunable in
+one table).**
 
 | Tier | Damage | Hit | Crit |
 |---|---|---|---|
-| Effective | ×1.5 | +15 | (decision: +0 or +10) |
+| Effective | ×1.5 | +15 | +0 (tentative — flag if you want Effective to also raise crit) |
 | Neutral | ×1.0 | +0 | +0 |
 | Resisted | ×0.67 | −15 | +0 |
 
@@ -102,22 +110,26 @@ same place the crit ×3 applies, so the forecast number times the tier is
 what the player sees happen. Order in `resolve_strike`:
 `(power − guard) × tier × (3 if crit) × offense_QTE × defense_QTE`, rounded
 once at the end. An Effective hit that would round to 0 deals a minimum
-of 1 (decision).
+of 1 (confirmed).
 
 **3. Where attunement lives.** On the **unit**, sourced from the
-*person*, not the class:
+*person*, not the class (confirmed):
 
 - Player and named characters: a field on `Character` (M2). Until
   `Character` exists, M1 gives each of the seven prototype classes a
   default attunement so Grimwater plays with the system live.
-- Enemies: an optional token on the map unit line
-  (`Mercenary 15 2 Raider tide`; Gap 2 formalizes the token grammar).
-  Absent token = Null.
+- Enemies: a **required** token on the map unit line
+  (`Mercenary 15 2 Raider water`; Gap 2 formalizes the token grammar).
+  The validator errors on a missing token — there is no default to fall
+  back to.
 - Weapons: the `Item` resource (M6) gets an *optional* `attunement` that
-  overrides the wielder's on **offense only** (a Tide tome lets a Gale
-  mage strike as Tide; defence stays the person's). This is the hook
-  that gives the item economy texture without a triangle. Decision:
-  include the field in M1's data model, implement in M6.
+  overrides the wielder's on **offense only** — e.g. a Water-attuned
+  blade lets an Earth-attuned wielder strike as Water; their defence
+  (what they resist/are weak to when hit) stays their own attunement
+  regardless of what they're holding. This is the hook that gives the
+  item economy texture without a triangle. Tentative default recorded
+  in decision #7 below — flag it if the offense-only framing isn't what
+  you meant.
 
 **4. Class = kit.** Formalize `UnitClass` as:
 
@@ -162,9 +174,10 @@ visible on the map (unit glyph corner) and in the unit panel.
 
 **7. AI and sim.** The AI already plans from `strike_stats`, so it prefers
 effective matchups the moment `strike_stats` includes the tier: no AI
-work. The headless sim gains a **matchup matrix** (kit × kit at each
-tier) and a regression check: Null vs Null must reproduce today's
-numbers exactly.
+work. The headless sim gains a **matchup matrix** (kit × kit at each of
+the five attunements, each tier) and a regression check: any
+same-element matchup (Neutral tier, e.g. Earth vs Earth) must reproduce
+today's pre-attunement numbers exactly.
 
 **8. Deliverable doc.** `docs/COMBAT_RULES.md`: the single source of truth
 for the formula, the chart, the tier table, the QTE multipliers, and the
@@ -172,10 +185,12 @@ resolution order. Written in M1, kept current after.
 
 ### Decisions to make
 
+_(all recorded below — kept for history.)_
+
 1. Confirm "medical" → magical, and accept **support** as the third
    attribute.
-2. Chart shape: B (4-cycle + Null) as recommended, or A/C.
-3. Element names (placeholders fine for M1) and whether Null exists.
+2. Chart shape: 3-cycle, 4-cycle + Null, or a bigger chart.
+3. Element names and whether Null exists.
 4. Tier numbers: ×1.5 / ×0.67 and ±15 hit as the starting point? Does
    Effective also add crit?
 5. Minimum 1 damage on an Effective hit: yes/no.
@@ -185,12 +200,29 @@ resolution order. Written in M1, kept current after.
    implement at M6: confirm.
 8. Class-based effectiveness (bow vs flier): dropped in v1: confirm.
 9. Generic enemies default to Null, or must every enemy be attuned?
-10. Does the web prototype mirror any of this? (Recommend no; it becomes
-    the archived reference per DECISIONS §1.)
+10. Does the web prototype mirror any of this?
 
 ### Calls made
 
-_(pending review)_
+1. **Confirmed.** Magical + support are the three attributes.
+2. **5-cycle**, no Null (rejects the recommended 4-cycle + Null shape).
+3. **Earth → Lightning → Fire → Wind → Water → Earth** (each beats the
+   next). Names are final, not placeholders, unless revisited later.
+4. **Locked as the starting point:** ×1.5 Effective / ×1.0 Neutral /
+   ×0.67 Resisted, ±15 hit. Crit bonus on Effective: **not explicitly
+   answered** — recorded as +0 (no crit change) pending confirmation;
+   flag if Effective should also raise crit.
+5. **Yes** — an Effective hit rounds up to a minimum of 1 damage.
+6. **Confirmed** — attunement lives on the person, never the class.
+7. **Not yet resolved** — the distinction (offense-only override,
+   defence always the person's own attunement) is written up above under
+   Proposal §3. Tentatively recorded as: include the field in M1's data
+   model, implement at M6, offense-only. Revisit once reviewed.
+8. **Confirmed** — no class-based effectiveness (bow vs flier) in v1.
+9. **Every enemy must be attuned** — there is no Null default. This
+   also means the chart shape has no unattuned tier at all (see #2).
+10. **Deferred** — decide whether the web prototype mirrors this after
+    all design gaps have been reviewed, not now.
 
 ---
 
@@ -278,7 +310,8 @@ _(pending review)_
 
 - **Deploy slots** on the player side, filled from the persistent roster
   at preparations, with optional forced deploys (the lord, a recruit).
-- **Enemy attributes**: level, attunement (Gap 0), equipped item (M6),
+- **Enemy attributes**: level, attunement (Gap 0 — required, no default),
+  equipped item (M6),
   AI profile (Gap 8), boss flag, drop item.
 - **Reinforcement waves** and **NPC/green units** (recruitables,
   villagers) with their own lines and triggers.
@@ -294,8 +327,10 @@ editor change. Decide the grammar once.
 
 ### Proposal
 
-Keep lines human-readable; extend with **optional tokens after the
-name**, order-free, `key` or `key=value`:
+Keep lines human-readable; extend with tokens after the name, order-free,
+`key` or `key=value`. Attunement (one of the five elements, Gap 0) is the
+one **required** token on every enemy/npc line — everything else stays
+optional:
 
 ```
 # player side: deploy slots (roster fills them), or a fixed named unit
@@ -303,13 +338,13 @@ slot 1 4
 slot 2 5 forced=lord
 Knight 1 6 Doran                       # fixed unit, chapter-1 style
 
-# enemy side: name, then attributes
-Mercenary 15 2 Raider L4 tide ai=hold
-Knight 14 3 Gorm L8 stone boss ai=guard:14,3:1 drop=Vulnerary
-Archer 12 7 Bowman L3                  # Null attunement, default AI
+# enemy side: name, attunement (required), then optional attributes
+Mercenary 15 2 Raider water L4 ai=hold
+Knight 14 3 Gorm L8 earth boss ai=guard:14,3:1 drop=Vulnerary
+Archer 12 7 Bowman fire L3             # default AI
 
 # npc side (new list)
-Healer 6 9 Averil recruit=talk:Silke
+Healer 6 9 Averil lightning recruit=talk:Silke
 ```
 
 Waves and terrain features stay in `ChapterData` events (GAME_PLAN 4.3),
@@ -418,8 +453,9 @@ avatar decision changes portrait and text budgets.
   voice.
 - Lord death = game over in Classic *and* Casual (FE norm). Lord is a
   forced deploy on every chapter.
-- The lord's attunement is a story choice (Gap 0), and the opposite
-  attunement belongs to the recurring antagonist.
+- The lord's attunement is a story choice (Gap 0), and the recurring
+  antagonist is attuned to whichever element beats the lord's in the
+  cycle, so the final fight opens as a Resisted matchup.
 
 ### Decisions to make
 

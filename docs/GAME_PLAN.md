@@ -317,12 +317,15 @@ is how projects die.
 ### M1 — Combat rule foundations (2 weeks)
 The rules of engagement, settled and written down before anything stores
 them. Inputs: the calls from DESIGN_GAPS Gap 0, Gap 1, Gap 5, Gap 9.
-- **Attunement chart as data** in `core/`: elements, `(atk, def) → tier`,
-  `tier → (dmg_mult, hit_delta, crit_delta)`. Two tables, one file.
-- `attunement` on `Unit`. Interim source: a per-class default so
-  Grimwater plays with the system live before `Character` exists (M2).
-  Enemy map lines accept an optional attunement token (first piece of
-  schema v2, Gap 2); the validator and workbench learn it.
+- **Attunement chart as data** in `core/`: five elements in a cycle
+  (Earth → Lightning → Fire → Wind → Water → Earth, no Null tier),
+  `(atk, def) → tier`, `tier → (dmg_mult, hit_delta, crit_delta)`. Two
+  tables, one file.
+- `attunement` on `Unit`, **required, no default**. Interim source: a
+  per-class default so Grimwater plays with the system live before
+  `Character` exists (M2). Enemy map lines carry a **required**
+  attunement token (first piece of schema v2, Gap 2); the validator
+  errors on a missing one, and the workbench learns it.
 - **Class = kit.** `UnitClass` gains `attribute` (physical | magical |
   support) replacing `is_magic`/`heal_*`; the seven classes are audited
   against the kit table in Gap 0 and the holes recorded for M3.
@@ -332,10 +335,10 @@ them. Inputs: the calls from DESIGN_GAPS Gap 0, Gap 1, Gap 5, Gap 9.
   Enemies stay at neutral.
 - **Forecast** shows tier (word + shape), post-tier hit and damage, and
   the damage band with the kill threshold by grade.
-- **Sim**: matchup matrix (kit × kit × tier pairs) in `sim_test.gd`;
-  regression that Null vs Null reproduces today's numbers exactly;
-  Grimwater still lands in the 60–75% player-win band with attunements
-  assigned.
+- **Sim**: matchup matrix (kit × kit × attunement × tier) in
+  `sim_test.gd`; regression that any same-element matchup (Neutral tier)
+  reproduces today's pre-attunement numbers exactly; Grimwater still
+  lands in the 60–75% player-win band with attunements assigned.
 - **`docs/COMBAT_RULES.md`**: single source of truth for the formula,
   the chart, tiers, QTE multipliers, and resolution order.
 - **Exit:** Grimwater plays with attunements visible in the forecast and
@@ -403,7 +406,7 @@ them. Inputs: the calls from DESIGN_GAPS Gap 0, Gap 1, Gap 5, Gap 9.
 - Preparations screen: deploy slots, equip, trade, shop (gold from
   chapter rewards/villages). Menu verbs Item/Trade (Gap 6).
 - **Exit:** a weapon breaks mid-chapter and the unit falls back to the
-  next; a Tide tome flips a Resisted matchup to Effective in the
+  next; a Water-attuned tome flips a Resisted matchup to Effective in the
   forecast; the sim's balance report includes gold/item flow.
 
 ### M7 — Feel (2–3 weeks)
@@ -473,8 +476,9 @@ river crossing falls; Act 1 is holding and escaping (ch. 1–3), Act 2 is
 gathering allies across the realm (ch. 4–7, most recruits here), Act 3 is
 taking the crossing back (ch. 8–10). The named enemies from Grimwater
 (Gorm, Vask, Hessa…) are the recurring antagonists; at least one becomes
-recruitable. The recurring antagonist's attunement is the lord's
-opposite, so the final fight is a neutral read decided by play.
+recruitable. The recurring antagonist's attunement is the one that beats
+the lord's in the cycle, so the final fight opens as a Resisted matchup
+the player has to out-tactic and out-time.
 
 ## Part 7 — Testing & balance strategy
 
@@ -482,7 +486,7 @@ This project's unusual asset is that the AI can play the whole game
 without a screen. Lean on it:
 
 - `sim_test.gd` (exists): per-map balance. M1 adds the matchup matrix
-  and the Null-vs-Null regression.
+  and the same-element (Neutral tier) regression.
 - `campaign_test.gd` (M3): plays the campaign end-to-end on each
   difficulty, 20 seeds. Reports win rate per chapter, average roster
   level per chapter, per-character death rate, gold curve, turn counts.
@@ -500,10 +504,11 @@ ones the plan cannot begin without:
 
 1. **Platform / canonical version** (DECISIONS §1). Recommendation:
    mobile-portrait.
-2. **Attunement chart shape and semantics** (DESIGN_GAPS Gap 0): chart
-   size, tier numbers, attunement on the person not the class, no
-   class-based effectiveness. Recommendation: 4-cycle + Null, ×1.5/×0.67,
-   ±15 hit. Gates M1.
+2. **Attunement chart shape and semantics** (DESIGN_GAPS Gap 0) — **decided**:
+   Earth → Lightning → Fire → Wind → Water → Earth (5-cycle, no Null),
+   ×1.5/×1.0/×0.67 damage, ±15 hit, attunement on the person not the
+   class, no class-based effectiveness, every unit (including generic
+   enemies) must be attuned. Gated M1; now unblocked.
 3. **QTE floor rules** (Gap 1): offense floor 1.0×, inaction = Guarded,
    two difficulty axes. Gates M1.
 4. **Permadeath default**: Classic default with Casual offered (FE norm),
@@ -529,8 +534,8 @@ ones the plan cannot begin without:
   playtest. Mitigations are already designed (Auto timing, meaningful-
   moment prompts, addition progression making chains satisfying) — but
   the playtest decides.
-- **A four-element chart can feel arbitrary** if the fiction doesn't
-  carry it. The element names, the lord/antagonist opposition, and
+- **A five-element chart can feel arbitrary** if the fiction doesn't
+  carry it. The element names, the lord/antagonist matchup, and
   per-attunement visual identity are story and art work, not just data.
 - **Art** is the biggest budget/time unknown; decouple it from
   engineering by keeping the placeholder pipeline working to the end.
