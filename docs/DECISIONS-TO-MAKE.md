@@ -72,6 +72,12 @@ structural validation and AI balance-testing.
 
 ## 2. Combat & QTE design decisions
 
+> The *rules* questions (attunement chart replacing the weapon triangle,
+> QTE floors, prompt policy, difficulty axes) are reviewed in
+> [DESIGN_GAPS.md](DESIGN_GAPS.md) Gaps 0 and 1 and land in GAME_PLAN
+> milestone M1. The items below are the *tuning* knobs that survive
+> whatever those calls are.
+
 - [ ] **Deflect trigger rule** — currently *magic attackers only*
   (readable: see a mage coming, know the motion). Alternatives: heavy
   chargers (Knight/Cavalier) also deflect; or a per-strike random mix.
@@ -193,9 +199,10 @@ first; the AI plays both sides identically). Knobs, in `ai.js` /
 ## 7. Roadmap (consolidated, roughly ordered)
 
 > Superseded in scope by [GAME_PLAN.md](GAME_PLAN.md), which lays out the
-> milestone path (M0–M9) from prototype to shipped game. The items below
-> remain accurate as the near-term engineering list; the plan's Part 8
-> names the five decisions that gate starting it.
+> milestone path (M0–M10) from prototype to shipped game, and by
+> [DESIGN_GAPS.md](DESIGN_GAPS.md), which records the design calls still
+> to make. The items below remain accurate as the near-term engineering
+> list; the plan's Part 8 names the decisions that gate starting it.
 
 1. Run the Godot project for the first time; fix any first-run nits
    (item 6.1) and commit the uid updates.
@@ -209,9 +216,10 @@ first; the AI plays both sides identically). Knobs, in `ai.js` /
    TileMapLayer with a real atlas, Resources (`.tres`) for unit classes,
    AnimationPlayer (rebuild the vignette timeline as tracks),
    AudioStreamPlayer (hit/parry/victory sounds).
-7. Game-design backlog from the original demo: weapon triangle,
-   multiple maps/objectives (not just rout), inventories & weapon
-   durability, campaign structure.
+7. Game-design backlog from the original demo: effectiveness system
+   (now the attunement chart, *not* a weapon triangle — DESIGN_GAPS
+   Gap 0), multiple maps/objectives (not just rout), inventories &
+   weapon durability, campaign structure.
 
 **Done since this file was written:** map authoring — what was "maps are
 compiled into source" is now the `claude/map-editor` branch (MapData

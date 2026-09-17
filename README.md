@@ -11,8 +11,11 @@ of seven fight across a river — available in two implementations:
   learning guide for programmers new to game engines).
 
 The plan for growing this into a full game (chapters, progression, dialogue)
-is [docs/GAME_PLAN.md](docs/GAME_PLAN.md). Maps are authored inside Godot —
-see [docs/MAP_EDITOR.md](docs/MAP_EDITOR.md).
+is [docs/GAME_PLAN.md](docs/GAME_PLAN.md); the design holes it still has
+to close, reviewed one at a time, are in
+[docs/DESIGN_GAPS.md](docs/DESIGN_GAPS.md) (starting with the attunement
+combat system that replaces Fire Emblem's weapon triangle). Maps are
+authored inside Godot — see [docs/MAP_EDITOR.md](docs/MAP_EDITOR.md).
 Open design questions, tuning knobs, and carry-forward caveats are tracked
 in [docs/DECISIONS-TO-MAKE.md](docs/DECISIONS-TO-MAKE.md). The mobile/swipe
 experiment lives on the `claude/mobile-swipe-prototype` branch, documented
