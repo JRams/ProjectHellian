@@ -27,15 +27,18 @@ all gain an attunement field).
 
 ## Gap 0 — Combat rule foundations: the attunement system
 
-**Status:** DECIDED — mechanism confirmed, a handful of concrete numbers/tags
-still OPEN (see Round 2 below) · **Milestone:** M1 (new, dedicated)
+**Status:** DECIDED — mechanism confirmed, a few concrete numbers still
+OPEN (see Round 3 below) · **Milestone:** M1 (new, dedicated)
 
-> **Round 2 supersedes Round 1's chart shape.** Round 1 (below) settled a
-> symmetric attacker-attunement-vs-defender-attunement cycle. Round 2
-> replaces the defending side of that chart with the defender's **unit
-> type** instead of their own attunement, and makes the attacker's
-> element conditional rather than universal. Round 1's writeup is kept
-> for history; Round 2, further down, is what M1 implements.
+> **Three rounds, read in order, each superseding parts of the last.**
+> Round 1 settled a symmetric attacker-attunement-vs-defender-attunement
+> cycle. Round 2 kept an asymmetric offense/defense split but defaulted
+> the defending side onto the **class**, and made the attacking side
+> conditional. Round 3 keeps Round 2's offense rule and its two-pronged
+> chart (§3a), but rejects the class default entirely: **attunement
+> lives only on the individual character, never the class, on either
+> side of a fight.** Rounds 1 and 2 are kept below for history; Round 3,
+> further down, is what M1 implements.
 
 ### Direction (given, not up for review)
 
@@ -239,7 +242,7 @@ _(all recorded below — kept for history.)_
 10. **Deferred** — decide whether the web prototype mirrors this after
     all design gaps have been reviewed, not now.
 
-### Round 2 — elemental attunement vs unit type (current)
+### Round 2 — elemental attunement vs unit type (partially superseded by Round 3 — see the strikethroughs below; the offense rule, the tier numbers, and the QTE window scaling all still stand)
 
 The Round 1 cycle made every attack elemental, attacker element vs
 defender element, symmetrically. On reflection that only actually reads
@@ -250,13 +253,14 @@ side is, and who gets to touch the attacking side at all.
 
 **1. Two different questions, not one.** *Does this attack carry an
 element?* (offense, conditional) and *what is this unit vulnerable to?*
-(defense, universal, free from class) are now separate.
+(defense — ~~universal, free from class~~ **per-character, see Round
+3**) are separate questions, still.
 
-**2. Whether an attack carries an element (offense):**
+**2. Whether an attack carries an element (offense) — stands as-is:**
 - A **magical**-attribute unit has an inherent element — their own
-  attunement, a `Character` field (M2) / per-class default (M1 interim).
-  This is the "only casters are inherently elemental" framing from your
-  answer.
+  attunement, a `Character` field (M2) / ~~per-class default~~ **a
+  per-unit field (M1 interim, Round 3)**. This is the "only casters are
+  inherently elemental" framing from your answer.
 - **Any** unit — physical, magical, or support — carries an element
   instead if they're wielding an **attuned weapon**. The weapon's
   element **overrides** the wielder's own inherent element for that
@@ -272,16 +276,16 @@ element?* (offense, conditional) and *what is this unit vulnerable to?*
   weapon): **the weapon wins.** A Water-attuned tome lets a
   Lightning-attuned mage strike as Water for that fight.
 
-**3. What a unit is vulnerable to (defense) — the unit type tag.** Every
-class carries a **type tag**, assigned once on the class, inherited for
-free by every unit of that class — no per-character or per-map-line
-authoring needed (this drops the Round 1 requirement that every enemy
-map line carry an attunement token; Gap 2's schema goes back to not
-needing one). Vocabulary: the five element names, reused as type tags
-(Earth/Lightning/Fire/Wind/Water) — **confirmed**, not a separate
-monster vocabulary. A class may also carry **no type** (mundane
-humans/soldiers): the chart is Neutral against them no matter what
-element attacks.
+**3. What a unit is vulnerable to (defense) — SUPERSEDED by Round 3
+below.** ~~Every class carries a **type tag**, assigned once on the
+class, inherited for free by every unit of that class — no
+per-character or per-map-line authoring needed.~~ Round 3 rejects
+per-class defaults outright: vulnerability, like the offense-side
+element, is bound to the character, never the class. Kept below for
+history; skip to Round 3 for what M1 implements. Vocabulary (still
+current): the five element names, reused for this axis too
+(Earth/Lightning/Fire/Wind/Water) — confirmed, not a separate monster
+vocabulary.
 
 **3a. The matchup table — confirmed, two-pronged, no neutral among the
 five.** Each element is Effective against **two** of the other four (and
@@ -327,24 +331,10 @@ exactly two:
 - **Water-type** defenders: vulnerable to Lightning and Wind; resist
   Earth and Fire.
 
-Proposed tag assignment for the seven existing classes (open to edits —
-this is the one piece of this round that's genuinely a content call, not
-just mechanism):
-
-| Class | Attribute | Type tag (defense) | Why |
-|---|---|---|---|
-| Knight | physical | Earth | heavy, grounded, immovable |
-| Mercenary | physical | *(none — mundane)* | the baseline human read |
-| Cavalier | physical | Lightning | speed, mobility |
-| Archer | physical | Wind | ranged, keen-eyed |
-| Mage | magical | *(none — see below)* | a caster's own inherent element already makes them read as "of" that element; giving the class itself a fixed type would fight the player's per-character choice |
-| Healer | support | Water | life-giving, restorative |
-| Pegasus Knight | physical | Wind | flight |
-
-Open question inside this table: Archer and Pegasus Knight both landing
-on Wind is a collision worth resolving before M1 (maybe Pegasus Knight
-should be untyped/mundane like Mercenary, or the vocabulary needs a
-sixth tag for fliers specifically — flag your preference).
+~~Proposed tag assignment for the seven existing classes:~~ **dropped
+along with per-class typing.** No class carries a default. (This also
+makes the Archer/Pegasus Knight Wind collision that this table would
+have created moot — see Round 3.)
 
 **4. Tiers and numbers — unchanged from Round 1, just reapplied.**
 Effective ×1.5 dmg / +15 hit, Neutral ×1.0 / +0, Resisted ×0.67 / −15
@@ -369,29 +359,22 @@ to fully mitigate (bigger number) and easier to attempt mitigating well
 (looser window), which reads as "a big hit you at least got a fair shot
 at," matching pillar 3 (full information, fair consequences).
 
-**6. Ripple effects.**
-- Gap 2 (map schema): the required-attunement-token rule is dropped.
-  Type comes free from class; enemy lines need nothing new for v1.
-  A `weapon=` token (M6, once Item exists) is the only way to give a
-  specific enemy an elemental attack beyond their class default.
-- `Character` (M2): `attunement` is only meaningful for magical-attribute
-  characters (their own element) or as a display of whatever weapon
-  they currently hold; physical/support characters can leave it unset.
-- Sim/regression (M1): the matchup matrix becomes **element × type**
-  instead of element × element; the no-element-vs-any-type case is the
-  regression floor that must reproduce today's pre-attunement numbers
-  exactly (trivially true, since a mundane attack is untouched).
-- Forecast: shows the type tag on the defender (if any) and the element
-  in play on the attacker (if any), same tier word/shape as before, plus
-  the QTE window hint ("tighter timing" / "easier timing").
+**6. Ripple effects — see Round 3** for the corrected version; the
+points below assumed the now-superseded per-class typing.
+- ~~Gap 2 (map schema): the required-attunement-token rule is dropped.
+  Type comes free from class; enemy lines need nothing new for v1.~~
+- ~~`Character` (M2): `attunement` is only meaningful for
+  magical-attribute characters.~~
+- ~~Sim/regression (M1): the matchup matrix becomes **element × type**
+  instead of element × element.~~
+- Forecast: still shows the tier word/shape and the QTE window hint —
+  unaffected by Round 3, just reads a per-character value now instead
+  of a class-derived one.
 
 ### Decisions to make (Round 2, open)
 
-1. The seven-class tag table above: confirm or adjust, especially the
-   Archer/Pegasus Knight Wind collision — this matters more now that
-   there's no neutral buffer between mismatched types; two classes
-   sharing a tag now share an identical vulnerability/resistance profile
-   outright, not just a similar one.
+1. ~~The seven-class tag table above: confirm or adjust~~ — moot, see
+   Round 3.
 2. Weapon overrides the wielder's own inherent element when both are
    present (proposed) vs. requiring a match, vs. stacking somehow.
 3. QTE window scale numbers: ×1.15 / ×1.0 / ×0.85 as a starting point.
@@ -405,15 +388,110 @@ at," matching pillar 3 (full information, fair consequences).
 1. **Conditional, not universal.** Inherent attunement only for
    magical-attribute units; a physical or support unit only carries an
    element if their weapon is attuned; otherwise no element at all.
-2. **New type tags per class** (not a reuse of the raw class list, not
-   an element-vs-element mirror); vocabulary is the five element names
-   themselves, confirmed, not a separate monster-style tag set.
+2. **New type tags per class — reversed by Round 3.** Vocabulary (the
+   five element names for this axis too) stands; *where the tag lives*
+   does not.
 3. **QTE timing windows scale with tier**, on both the offense addition
    and the defense parry.
 4. **Two-pronged matchup table, no neutral among the five real
    elements** — each element is Effective against two others and
    Resisted by the other two (§3a's table). This replaces Round 2's
-   first-draft single-adjacency reuse of the cycle order.
+   first-draft single-adjacency reuse of the cycle order. Unaffected by
+   Round 3 — this is the table, just looked up against a differently
+   sourced value now.
+
+### Round 3 — attunement is character-bound, full stop (current)
+
+> "The unit types themselves shouldn't have default attunement at all.
+> The attunement is character bound, not class."
+
+Round 2 split the system into two questions — *does this attack carry an
+element* (offense) and *what is this unit vulnerable to* (defense) — and
+answered the second one by defaulting it onto the class. That default is
+withdrawn. There is no class-level elemental default of any kind,
+offense or defense. **Attunement lives on the individual — the
+`Character`, or for M1's prototype roster before `Character` exists, the
+unit itself — and nowhere else.**
+
+**1. One field, two uses, always optional.** A character's `attunement`
+(one of the five elements, or unset) is the single source for both
+sides of a fight:
+- **Offense**, unchanged from Round 2's conditional rule: it applies
+  automatically if the character is magical-attribute; a weapon's own
+  attunement overrides it (or supplies one, for a physical/support
+  character with no attunement of their own) when equipped; otherwise
+  the strike carries no element.
+- **Defense**: the chart looks up `(attacker's element, this
+  character's own attunement)`. No attunement set = the "none" case,
+  Neutral no matter what hits them — same floor as an unelemented
+  attack, just from the other side.
+
+**2. Classes carry no attunement, no default, nothing.** `UnitClass`
+loses the `type_tag` field Round 2 proposed. A Knight isn't Earth-typed
+by being a Knight; *a specific Knight* might be, if that's who they are.
+This also means the Archer/Pegasus Knight Wind collision Round 2 flagged
+can't happen — collisions would now require two *characters* to
+deliberately share an element, which is a writing choice, not a data
+accident.
+
+**3. Most units have none, and that's the point.** Elemental play
+becomes a **texture, not a universal axis**. A generic soldier has no
+attunement — fighting them is exactly today's math, no chart involved at
+all. Attunement is something a character *has*: the lord, the recurring
+antagonist, mages (usually), a themed elite enemy, an heirloom weapon's
+wielder. This reads better against pillar 1 (every unit is a person) —
+being elementally attuned becomes a fact about *who somebody is*, not a
+side effect of their job.
+
+**4. Ripple effects, corrected.**
+- `Character` (M2): `attunement` is a plain optional field, no attribute
+  gating on whether it's "meaningful" — any character, physical,
+  magical, or support, may have one or not.
+- M1 interim (before `Character` exists): the prototype roster lines
+  (`[class, x, y, name]`) need an optional fifth slot for a specific
+  unit's attunement, defaulting to none when absent. Only a handful of
+  Grimwater's named units (say, the Mage and one or two named enemies)
+  would carry one for M1's exit test — most of the roster stays
+  unattuned, which is realistic to how the finished game will look too.
+- Gap 2 (map schema): the attunement token **returns, but now genuinely
+  optional** (not Round 1's mandatory-on-every-line rule). Present only
+  on the units it's narratively true for; the validator accepts absence
+  as "no attunement," not an error.
+- Sim/regression (M1): the matchup matrix is **element × (a defending
+  character's attunement, or none)**. The regression floor — no element
+  on either side reproduces today's pre-attunement numbers exactly — is
+  even easier to hold now, since it's the *common* case, not an edge
+  case.
+- Forecast: shows a character's attunement only when they have one; a
+  fight between two unattuned units shows no elemental line at all,
+  which itself communicates something (this one's just a fight).
+
+### Decisions to make (Round 3, open)
+
+1. M1 interim: which of Grimwater's named units get an attunement, and
+   which element — a content call for the person, not a mechanism call
+   (propose: the Mage gets one, since testing a caster's inherent-element
+   path is the point; one named enemy gets one to test the Resisted
+   side).
+2. Should a magical-attribute character *without* an attunement set
+   still be a valid build (an "unattuned" caster whose spells carry no
+   elemental bonus or penalty), or should every magical character be
+   required to pick one? Proposed: valid and unremarkable — "no
+   attunement" is a legitimate character, not a placeholder state.
+3. Items not yet touched by Round 2/3: weapon-match-or-override question
+   (Round 2 #2 above) and the QTE window-scale numbers (Round 2 #3)
+   still stand as open.
+
+### Calls made (Round 3)
+
+1. **Confirmed — no class-level attunement or type, offense or
+   defense, in any form.** Reverses Round 2's item 2 (new type tags per
+   class) and its class-tag table.
+2. **Attunement is a single per-character field**, used conditionally
+   on offense (Round 2's rule, unchanged) and directly on defense
+   (looked up against the attacker's element, or Neutral if unset).
+3. **Most units carry no attunement.** It's an individual trait, not a
+   mechanic every unit is expected to participate in.
 
 ---
 
@@ -501,9 +579,9 @@ _(pending review)_
 
 - **Deploy slots** on the player side, filled from the persistent roster
   at preparations, with optional forced deploys (the lord, a recruit).
-- **Enemy attributes**: level, attunement (Gap 0 — required, no default),
-  equipped item (M6),
-  AI profile (Gap 8), boss flag, drop item.
+- **Enemy attributes**: level, attunement (Gap 0 Round 3 — optional,
+  per-character, no default of any kind; present only on named/notable
+  units), equipped item (M6), AI profile (Gap 8), boss flag, drop item.
 - **Reinforcement waves** and **NPC/green units** (recruitables,
   villagers) with their own lines and triggers.
 - **Terrain with parameters**: village contents, throne/seize target,
@@ -519,9 +597,9 @@ editor change. Decide the grammar once.
 ### Proposal
 
 Keep lines human-readable; extend with tokens after the name, order-free,
-`key` or `key=value`. Attunement (one of the five elements, Gap 0) is the
-one **required** token on every enemy/npc line — everything else stays
-optional:
+`key` or `key=value`. Every token, including attunement (one of the five
+elements, Gap 0 Round 3), is **optional** — most enemy/npc lines carry
+no attunement token at all, which is the normal case, not a gap:
 
 ```
 # player side: deploy slots (roster fills them), or a fixed named unit
@@ -529,10 +607,10 @@ slot 1 4
 slot 2 5 forced=lord
 Knight 1 6 Doran                       # fixed unit, chapter-1 style
 
-# enemy side: name, attunement (required), then optional attributes
-Mercenary 15 2 Raider water L4 ai=hold
+# enemy side: name, then whatever optional attributes apply
+Mercenary 15 2 Raider L4 ai=hold       # no attunement — the common case
 Knight 14 3 Gorm L8 earth boss ai=guard:14,3:1 drop=Vulnerary
-Archer 12 7 Bowman fire L3             # default AI
+Archer 12 7 Bowman L3                  # default AI, no attunement
 
 # npc side (new list)
 Healer 6 9 Averil lightning recruit=talk:Silke
@@ -645,8 +723,10 @@ avatar decision changes portrait and text budgets.
 - Lord death = game over in Classic *and* Casual (FE norm). Lord is a
   forced deploy on every chapter.
 - The lord's attunement is a story choice (Gap 0), and the recurring
-  antagonist's class carries one of the two type tags that resist it
-  (Gap 0 §3a), so the final fight opens as a Resisted matchup.
+  antagonist is personally attuned to one of the two elements that
+  resist it (Gap 0 §3a) — a character trait chosen for them, not
+  inherited from their class — so the final fight opens as a Resisted
+  matchup.
 
 ### Decisions to make
 

@@ -157,26 +157,31 @@ free, like `MapData`) or human-readable text (like the map rows).
 ```
 Attunement chart (core data)   the read
   elements[] (Earth, Lightning, Fire, Wind, Water)
-  type_tags[] (a subset of elements[], plus "none" for mundane classes)
-  chart[(element, type_tag)] -> tier    effective | neutral | resisted
-  # two-pronged: each element Effective vs 2 types, Resisted by the
-  # other 2, Neutral only on itself or vs "none" (DESIGN_GAPS Gap 0 §3a
-  # has the full table — Earth>{Wind,Lightning}, Water>{Fire,Earth},
-  # Lightning>{Water,Wind}, Wind>{Fire,Water}, Fire>{Earth,Lightning})
+  chart[(attacker_element, defender_element)] -> tier
+      effective | neutral | resisted
+  # two-pronged: each element Effective vs 2 others, Resisted by the
+  # other 2, Neutral vs itself or when either side has none set
+  # (DESIGN_GAPS Gap 0 §3a has the full table — Earth>{Wind,Lightning},
+  # Water>{Fire,Earth}, Lightning>{Water,Wind}, Wind>{Fire,Water},
+  # Fire>{Earth,Lightning})
   tiers{tier -> dmg_mult, hit_delta, qte_window_scale}
+  # NOTE: attunement is per-CHARACTER only (Gap 0 Round 3) — no class
+  # ever supplies a default on either side of this lookup.
 
 Character (Resource)      who they are
   id, display_name, portrait, class_id, join_level, is_lord
-  attunement (own inherent element — meaningful for magical attribute only)
+  attunement (optional; own element, used both offensively — when
+              magical-attribute or wielding no attuned weapon of their
+              own — and defensively, always, against any attacker)
   bases{hp,str,mag,skl,spd,def,res}, growths{…} (0–100 %)
   addition_override (optional), addition_level, death_quote, recruit{condition}
   supports[{with: id, ranks: [C,B,A] -> dialogue files}]
 
 UnitClass (exists)        what they can do — the KIT
   attribute (physical | magical | support), attack_range[], weapon,
-  type_tag (defense — an element, or "none" for mundane classes)
   addition (default QTE pattern), movement (foot|mounted|flier, armoured)
   + promotes_to, promotion_bonuses{}, level_cap
+  # no attunement / type field of any kind — Gap 0 Round 3
 
 Item (Resource)           what they carry
   kind (sword/lance/axe/bow/tome/staff/consumable — flavour + animation)
@@ -187,10 +192,11 @@ Item (Resource)           what they carry
 
 MapData (exists, schema v2 in Gap 2)   where they fight
   + player lines become deploy SLOTS (the roster fills them at prep)
-  + enemy lines gain tokens:  "Brigand 15 2 Raider L4 ai=hold boss"
-    (no attunement token needed — type comes free from class; a
-    "weapon=" token arrives with Item in M6 for enemies that should
-    carry an elemental weapon)
+  + enemy lines gain tokens:  "Brigand 15 2 Raider L4 fire ai=hold boss"
+    (attunement token OPTIONAL, present only on named/notable units —
+    most enemy lines carry none, which is a valid, common state, not an
+    error; a "weapon=" token arrives with Item in M6 for an elemental
+    weapon independent of the wielder's own attunement)
   + npc_units, features (village/throne/escape), schema_version
 
 ChapterData (Resource)    one chapter
@@ -281,11 +287,13 @@ Combat (settled in M1, written up in `docs/COMBAT_RULES.md`):
   always does (their own inherent attunement); any attacker does if
   their weapon is attuned (the weapon's element overrides the wielder's
   own); otherwise the strike carries no element at all.
-- **Tier** looked up as `(element, defender's type tag) → tier` when the
-  strike has an element; always Neutral/no-op when it doesn't. Effective
-  ×1.5 dmg / +15 hit, Neutral ×1.0 / +0, Resisted ×0.67 / −15 (Gap 0
-  Round 2; numbers live in one table). Type tags are assigned per class,
-  not authored per unit.
+- **Tier** looked up as `(attacker's element, defender's own attunement)
+  → tier` when the strike has an element; always Neutral/no-op when it
+  doesn't, and also Neutral when the defender has no attunement of their
+  own (most units — Gap 0 Round 3). Effective ×1.5 dmg / +15 hit,
+  Neutral ×1.0 / +0, Resisted ×0.67 / −15 (Gap 0 §3a; numbers live in
+  one table). **Attunement is authored per character, never assumed
+  from class** — most units, player and enemy alike, simply have none.
 - Resolution order per strike:
   `(power − guard) × tier × (3 if crit) × offense_QTE × defense_QTE`,
   rounded once. Hit = `hit + skl×2 − avoid + tier_hit`, clamped 5–100.
@@ -339,48 +347,62 @@ is how projects die.
 
 ### M1 — Combat rule foundations (2 weeks)
 The rules of engagement, settled and written down before anything stores
-them. Inputs: the calls from DESIGN_GAPS Gap 0 (Round 2), Gap 1, Gap 5,
+them. Inputs: the calls from DESIGN_GAPS Gap 0 (Round 3), Gap 1, Gap 5,
 Gap 9.
 - **Attunement chart as data** in `core/`: five elements
-  (Earth/Lightning/Fire/Wind/Water) reused as **type tags**; a
-  two-pronged `(element, type_tag) → tier` table where each element is
-  Effective against two types and Resisted by the other two (no neutral
-  among the five — DESIGN_GAPS Gap 0 §3a has the full matrix), and
-  `tier → (dmg_mult, hit_delta, qte_window_scale)`. Two tables, one file.
-- **Type tag** on `UnitClass` — free, one per class (or "none" for
-  mundane classes), no per-map or per-character authoring. The seven
-  existing classes get the proposed tags from Gap 0 Round 2 (flag any
-  you want changed, especially the Archer/Pegasus Knight Wind collision).
-- **Attunement on `Unit`, conditional, not required**: a magical-
-  attribute unit has an inherent element (a per-class default for M1's
-  interim, moving to `Character` at M2); any unit carries an element
-  instead if wielding an attuned weapon (weapon wins over inherent);
-  otherwise the strike carries no element. No map-line token needed for
-  this in v1 — Gap 2's schema stays as-is.
+  (Earth/Lightning/Fire/Wind/Water); a two-pronged
+  `(attacker_element, defender_element) → tier` table where each element
+  is Effective against two others and Resisted by the other two (no
+  neutral among the five — DESIGN_GAPS Gap 0 §3a has the full matrix),
+  and `tier → (dmg_mult, hit_delta, qte_window_scale)`. Two tables, one
+  file. **No class-level entry point of any kind** — the chart is only
+  ever looked up against a specific character's own attunement.
+- **No type tag on `UnitClass`.** Classes carry no default attunement,
+  offense or defense (Gap 0 Round 3 reversed Round 2's per-class
+  default). This also means there's no Archer/Pegasus Knight collision
+  to resolve — typing is individual, not class-derived, so it can't
+  collide.
+- **Attunement on `Unit`, conditional on offense, optional everywhere**:
+  a magical-attribute unit has an inherent element *if the specific unit
+  has one assigned* (no per-class default — a per-unit field for M1's
+  interim roster, moving to `Character` at M2); any unit carries an
+  element instead if wielding an attuned weapon (weapon wins over
+  inherent); otherwise the strike carries no element. On defense, the
+  chart is looked up against the defender's own attunement if they have
+  one, Neutral otherwise — which is most units, by design.
 - **Class = kit.** `UnitClass` gains `attribute` (physical | magical |
   support) replacing `is_magic`/`heal_*`; the seven classes are audited
   against the kit table in Gap 0 and the holes recorded for M3.
 - **`combat.gd` rewrite**: `strike_stats` determines whether the strike
-  has an element, looks up `(element, defender.type_tag) → tier`, and
-  applies it to damage, hit, and the QTE window scale; `resolve_strike`
-  uses the fixed resolution order; QTE floor rules from Gap 1 (offense
-  floor, inaction = Guarded). Enemies stay at neutral multipliers on the
-  damage roll but still read the tier for their own window scale.
-- **Forecast** shows the tier (word + shape), post-tier hit and damage,
-  the damage band with the kill threshold by grade, and a timing hint
-  ("tighter timing" / "easier timing") when a tier is in play.
-- **Sim**: matchup matrix (kit × element × type-tag × tier) in
-  `sim_test.gd`; regression that a no-element strike against any type
-  tag reproduces today's pre-attunement numbers exactly; Grimwater still
-  lands in the 60–75% player-win band once classes carry type tags and
-  the Mage's inherent element is assigned.
+  has an element, looks up `(attacker.element, defender.attunement) →
+  tier`, and applies it to damage, hit, and the QTE window scale;
+  `resolve_strike` uses the fixed resolution order; QTE floor rules from
+  Gap 1 (offense floor, inaction = Guarded). Enemies stay at neutral
+  multipliers on the damage roll but still read the tier for their own
+  window scale.
+- **Interim roster (M1, before `Character`):** the prototype unit lines
+  gain an optional attunement field. Only a handful of Grimwater's named
+  units carry one (proposed: the Mage, to exercise the inherent-element
+  path, and one named enemy, to exercise the Resisted side) — most of
+  the roster stays unattuned, matching how the finished game will read.
+- **Forecast** shows a character's attunement only when they have one,
+  the tier (word + shape), post-tier hit and damage, the damage band
+  with the kill threshold by grade, and a timing hint ("tighter timing"
+  / "easier timing") when a tier is in play. A fight between two
+  unattuned units shows no elemental line at all.
+- **Sim**: matchup matrix (kit × element × defender-attunement-or-none ×
+  tier) in `sim_test.gd`; regression that a no-element strike against an
+  unattuned defender reproduces today's pre-attunement numbers exactly —
+  the common case, not an edge case, so this is the majority of test
+  coverage by construction. Grimwater still lands in the 60–75%
+  player-win band once the handful of named attunements are assigned.
 - **`docs/COMBAT_RULES.md`**: single source of truth for the formula,
   the chart, tiers, QTE window scale, and resolution order.
-- **Exit:** Grimwater plays with type tags visible in the forecast and
-  on units, a mage's inherent element read against them; the sim's
-  matchup matrix shows Effective pairs winning measurably more and
-  landing more perfect QTE grades; COMBAT_RULES.md matches the code
-  line for line.
+- **Exit:** Grimwater plays with the Mage's inherent element and one
+  named enemy's attunement visible in the forecast, everyone else
+  fighting exactly as today; the sim's matchup matrix shows Effective
+  pairs winning measurably more and landing more perfect QTE grades;
+  COMBAT_RULES.md matches the code line for line.
 
 ### M2 — Campaign skeleton (2 weeks)
 - `Character` (with `attunement`, `is_lord`), `ChapterData`, `Campaign`,
@@ -518,9 +540,10 @@ river crossing falls; Act 1 is holding and escaping (ch. 1–3), Act 2 is
 gathering allies across the realm (ch. 4–7, most recruits here), Act 3 is
 taking the crossing back (ch. 8–10). The named enemies from Grimwater
 (Gorm, Vask, Hessa…) are the recurring antagonists; at least one becomes
-recruitable. The recurring antagonist's class carries one of the two
-type tags that resist the lord's own element, so the final fight opens
-as a Resisted matchup the player has to out-tactic and out-time.
+recruitable. The recurring antagonist is personally attuned to one of
+the two elements that resist the lord's own — a trait written for that
+character, not inherited from their class — so the final fight opens as
+a Resisted matchup the player has to out-tactic and out-time.
 
 ## Part 7 — Testing & balance strategy
 
@@ -528,7 +551,8 @@ This project's unusual asset is that the AI can play the whole game
 without a screen. Lean on it:
 
 - `sim_test.gd` (exists): per-map balance. M1 adds the matchup matrix
-  and the no-element-vs-any-type regression floor.
+  and the no-attunement-either-side regression floor (the common case,
+  by construction, since most units carry no attunement at all).
 - `campaign_test.gd` (M3): plays the campaign end-to-end on each
   difficulty, 20 seeds. Reports win rate per chapter, average roster
   level per chapter, per-character death rate, gold curve, turn counts.
@@ -546,20 +570,20 @@ ones the plan cannot begin without:
 
 1. **Platform / canonical version** (DECISIONS §1). Recommendation:
    mobile-portrait.
-2. **Attunement mechanism** (DESIGN_GAPS Gap 0, Round 2) — **decided**:
-   elemental effectiveness is checked against the defender's class-based
-   **type tag** (the five element names reused as tags), not a mirrored
-   attunement; an attack only carries an element if the attacker is
-   magical-attribute (inherent) or wields an attuned weapon (any
-   attribute); the matchup table is **two-pronged** — each element is
-   Effective against two type tags and Resisted by the other two, no
+2. **Attunement mechanism** (DESIGN_GAPS Gap 0, Round 3) — **decided**:
+   attunement is a single, optional, per-**character** field (the five
+   element names), never a class default on either offense or defense;
+   an attack only carries an element if the attacker is magical-
+   attribute (their own attunement, if set) or wields an attuned weapon
+   (any attribute); the matchup table is **two-pronged** — each element
+   is Effective against two others and Resisted by the other two, no
    neutral among the five (§3a's matrix) — and tier scales damage, hit,
-   *and* QTE window width on both sides. Numbers carried over:
-   ×1.5/×1.0/×0.67 damage, ±15 hit. Still open: the per-class tag
-   assignments (a proposed table exists), the QTE window scale numbers,
-   and whether a weapon's element must match the wielder's own. Gates
-   M1; unblocked enough to start, tag assignments
-   to confirm before the class audit is final.
+   *and* QTE window width on both sides. Most units simply have no
+   attunement and fight exactly as today. Numbers carried over:
+   ×1.5/×1.0/×0.67 damage, ±15 hit. Still open: which of Grimwater's
+   named units get an attunement for M1's interim roster, the QTE
+   window scale numbers, and whether a weapon's element must match the
+   wielder's own. Gates M1; unblocked enough to start.
 3. **QTE floor rules** (Gap 1): offense floor 1.0×, inaction = Guarded,
    two difficulty axes. Gates M1.
 4. **Permadeath default**: Classic default with Casual offered (FE norm),
