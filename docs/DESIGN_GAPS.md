@@ -277,13 +277,55 @@ class carries a **type tag**, assigned once on the class, inherited for
 free by every unit of that class — no per-character or per-map-line
 authoring needed (this drops the Round 1 requirement that every enemy
 map line carry an attunement token; Gap 2's schema goes back to not
-needing one). Proposed vocabulary: **reuse the five Round-1 element
-names as type tags** (Earth/Lightning/Fire/Wind/Water), so the existing
-cycle order can be read one direction — element X is Effective against
-type X's "prey" in the same Earth→Lightning→Fire→Wind→Water→Earth
-order — without designing a second, unrelated matchup table from
-scratch. A class may also carry **no type** (mundane humans/soldiers):
-the chart is Neutral against them no matter what element attacks.
+needing one). Vocabulary: the five element names, reused as type tags
+(Earth/Lightning/Fire/Wind/Water) — **confirmed**, not a separate
+monster vocabulary. A class may also carry **no type** (mundane
+humans/soldiers): the chart is Neutral against them no matter what
+element attacks.
+
+**3a. The matchup table — confirmed, two-pronged, no neutral among the
+five.** Each element is Effective against **two** of the other four (and
+therefore Resisted by the other two) — not the single-adjacency read
+Round 2 first proposed. This is a complete regular tournament: every
+element beats exactly two, loses to exactly two, and there are no
+neutral pairs left among the five real elements (Neutral now only
+happens against the "none" tag, or when the attack has no element at
+all).
+
+| Attacker ↓ / Defender → | Earth | Lightning | Fire | Wind | Water |
+|---|---|---|---|---|---|
+| **Earth** | — | Effective | Resisted | Effective | Resisted |
+| **Lightning** | Resisted | — | Resisted | Effective | Effective |
+| **Fire** | Effective | Effective | — | Resisted | Resisted |
+| **Wind** | Resisted | Resisted | Effective | — | Effective |
+| **Water** | Effective | Resisted | Effective | Resisted | — |
+
+In words: Earth is effective against Wind and Lightning; Water is
+effective against Fire and Earth; Lightning is effective against Water
+and Wind; Wind is effective against Fire and Water; Fire is effective
+against Earth and Lightning. The diagonal (an element attacking its own
+type) is **Neutral** — not part of the ten stated relations, filled in
+as the obvious default.
+
+Every cell reads as "this row's element, attacking this column's type."
+The reverse relationship is never assumed — it's whatever the table says
+for that pair, and every pair in this table happens to have a single
+consistent direction (it's a complete tournament: each element wins
+exactly two matchups and loses exactly two, with none left over).
+Read as a defensive profile instead (which attackers hurt a given type
+most), each type is vulnerable to exactly two elements and resists
+exactly two:
+
+- **Earth-type** defenders: vulnerable to Fire and Water; resist
+  Lightning and Wind.
+- **Lightning-type** defenders: vulnerable to Earth and Fire; resist
+  Wind and Water.
+- **Fire-type** defenders: vulnerable to Water and Wind; resist Earth
+  and Lightning.
+- **Wind-type** defenders: vulnerable to Earth and Lightning; resist
+  Fire and Water.
+- **Water-type** defenders: vulnerable to Lightning and Wind; resist
+  Earth and Fire.
 
 Proposed tag assignment for the seven existing classes (open to edits —
 this is the one piece of this round that's genuinely a content call, not
@@ -345,15 +387,15 @@ at," matching pillar 3 (full information, fair consequences).
 
 ### Decisions to make (Round 2, open)
 
-1. Type-tag vocabulary: reuse the five element names (proposed) vs a
-   distinct monster-style vocabulary (Beast/Armored/Flier/Arcane/
-   Aquatic/Undead) with its own matchup table.
-2. The seven-class tag table above: confirm or adjust, especially the
-   Archer/Pegasus Knight Wind collision.
-3. Weapon overrides the wielder's own inherent element when both are
+1. The seven-class tag table above: confirm or adjust, especially the
+   Archer/Pegasus Knight Wind collision — this matters more now that
+   there's no neutral buffer between mismatched types; two classes
+   sharing a tag now share an identical vulnerability/resistance profile
+   outright, not just a similar one.
+2. Weapon overrides the wielder's own inherent element when both are
    present (proposed) vs. requiring a match, vs. stacking somehow.
-4. QTE window scale numbers: ×1.15 / ×1.0 / ×0.85 as a starting point.
-5. Can a monster/beast ever be innately elemental without being
+3. QTE window scale numbers: ×1.15 / ×1.0 / ×0.85 as a starting point.
+4. Can a monster/beast ever be innately elemental without being
    magical-attribute (a fire drake's claws just *are* fire)? Flagged as
    a future nuance — not needed for the current seven-class roster, can
    wait until M3's new-class pass or M9 content.
@@ -364,9 +406,14 @@ at," matching pillar 3 (full information, fair consequences).
    magical-attribute units; a physical or support unit only carries an
    element if their weapon is attuned; otherwise no element at all.
 2. **New type tags per class** (not a reuse of the raw class list, not
-   an element-vs-element mirror).
+   an element-vs-element mirror); vocabulary is the five element names
+   themselves, confirmed, not a separate monster-style tag set.
 3. **QTE timing windows scale with tier**, on both the offense addition
    and the defense parry.
+4. **Two-pronged matchup table, no neutral among the five real
+   elements** — each element is Effective against two others and
+   Resisted by the other two (§3a's table). This replaces Round 2's
+   first-draft single-adjacency reuse of the cycle order.
 
 ---
 
@@ -598,8 +645,8 @@ avatar decision changes portrait and text budgets.
 - Lord death = game over in Classic *and* Casual (FE norm). Lord is a
   forced deploy on every chapter.
 - The lord's attunement is a story choice (Gap 0), and the recurring
-  antagonist is attuned to whichever element beats the lord's in the
-  cycle, so the final fight opens as a Resisted matchup.
+  antagonist's class carries one of the two type tags that resist it
+  (Gap 0 §3a), so the final fight opens as a Resisted matchup.
 
 ### Decisions to make
 

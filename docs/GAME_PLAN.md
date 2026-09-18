@@ -156,9 +156,13 @@ free, like `MapData`) or human-readable text (like the map rows).
 
 ```
 Attunement chart (core data)   the read
-  elements[] (Earth, Lightning, Fire, Wind, Water — cycle order)
+  elements[] (Earth, Lightning, Fire, Wind, Water)
   type_tags[] (a subset of elements[], plus "none" for mundane classes)
   chart[(element, type_tag)] -> tier    effective | neutral | resisted
+  # two-pronged: each element Effective vs 2 types, Resisted by the
+  # other 2, Neutral only on itself or vs "none" (DESIGN_GAPS Gap 0 §3a
+  # has the full table — Earth>{Wind,Lightning}, Water>{Fire,Earth},
+  # Lightning>{Water,Wind}, Wind>{Fire,Water}, Fire>{Earth,Lightning})
   tiers{tier -> dmg_mult, hit_delta, qte_window_scale}
 
 Character (Resource)      who they are
@@ -337,10 +341,12 @@ is how projects die.
 The rules of engagement, settled and written down before anything stores
 them. Inputs: the calls from DESIGN_GAPS Gap 0 (Round 2), Gap 1, Gap 5,
 Gap 9.
-- **Attunement chart as data** in `core/`: five elements in a cycle
-  (Earth → Lightning → Fire → Wind → Water → Earth) used as **type
-  tags**; `(element, type_tag) → tier`, `tier → (dmg_mult, hit_delta,
-  qte_window_scale)`. Two tables, one file.
+- **Attunement chart as data** in `core/`: five elements
+  (Earth/Lightning/Fire/Wind/Water) reused as **type tags**; a
+  two-pronged `(element, type_tag) → tier` table where each element is
+  Effective against two types and Resisted by the other two (no neutral
+  among the five — DESIGN_GAPS Gap 0 §3a has the full matrix), and
+  `tier → (dmg_mult, hit_delta, qte_window_scale)`. Two tables, one file.
 - **Type tag** on `UnitClass` — free, one per class (or "none" for
   mundane classes), no per-map or per-character authoring. The seven
   existing classes get the proposed tags from Gap 0 Round 2 (flag any
@@ -512,9 +518,9 @@ river crossing falls; Act 1 is holding and escaping (ch. 1–3), Act 2 is
 gathering allies across the realm (ch. 4–7, most recruits here), Act 3 is
 taking the crossing back (ch. 8–10). The named enemies from Grimwater
 (Gorm, Vask, Hessa…) are the recurring antagonists; at least one becomes
-recruitable. The recurring antagonist's class carries the type tag that
-resists the lord's own element, so the final fight opens as a Resisted
-matchup the player has to out-tactic and out-time.
+recruitable. The recurring antagonist's class carries one of the two
+type tags that resist the lord's own element, so the final fight opens
+as a Resisted matchup the player has to out-tactic and out-time.
 
 ## Part 7 — Testing & balance strategy
 
@@ -542,14 +548,17 @@ ones the plan cannot begin without:
    mobile-portrait.
 2. **Attunement mechanism** (DESIGN_GAPS Gap 0, Round 2) — **decided**:
    elemental effectiveness is checked against the defender's class-based
-   **type tag**, not a mirrored attunement; an attack only carries an
-   element if the attacker is magical-attribute (inherent) or wields an
-   attuned weapon (any attribute); tier scales damage, hit, *and* QTE
-   window width on both sides. Numbers carried over: ×1.5/×1.0/×0.67
-   damage, ±15 hit. Still open: the type-tag vocabulary and the
-   per-class tag assignments (a proposed table exists), the QTE window
-   scale numbers, and whether a weapon's element must match the
-   wielder's own. Gates M1; unblocked enough to start, tag assignments
+   **type tag** (the five element names reused as tags), not a mirrored
+   attunement; an attack only carries an element if the attacker is
+   magical-attribute (inherent) or wields an attuned weapon (any
+   attribute); the matchup table is **two-pronged** — each element is
+   Effective against two type tags and Resisted by the other two, no
+   neutral among the five (§3a's matrix) — and tier scales damage, hit,
+   *and* QTE window width on both sides. Numbers carried over:
+   ×1.5/×1.0/×0.67 damage, ±15 hit. Still open: the per-class tag
+   assignments (a proposed table exists), the QTE window scale numbers,
+   and whether a weapon's element must match the wielder's own. Gates
+   M1; unblocked enough to start, tag assignments
    to confirm before the class audit is final.
 3. **QTE floor rules** (Gap 1): offense floor 1.0×, inaction = Guarded,
    two difficulty axes. Gates M1.
